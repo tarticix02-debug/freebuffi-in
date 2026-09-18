@@ -1,0 +1,5 @@
+import {Chess,type Square,type PieceSymbol,type Color} from 'chess.js';
+const V:Record<PieceSymbol,number>={p:100,n:320,b:330,r:500,q:900,k:20000};
+function attackers(fen:string,target:Square,color:Color){try{const p=fen.split(' ');p[1]=color;p[3]='-';const c=new Chess(p.join(' '));return c.moves({verbose:true}).filter(m=>m.to===target).map(m=>V[m.piece]);}catch{return []}}
+export function staticExchangeEval(fen:string,target:Square){const c=new Chess(fen);const victim=c.get(target);if(!victim)return 0;const ac:vColor= victim.color==='w'?'b':'w';const a=attackers(fen,target,ac).sort((x,y)=>x-y);const d=attackers(fen,target,victim.color).sort((x,y)=>x-y);if(!a.length)return 0;const seq:number[]=[];let ai=0,di=0,side='a';while(true){if(side==='a'){if(ai>=a.length)break;seq.push(a[ai++]);side='d'}else{if(di>=d.length)break;seq.push(d[di++]);side='a'}}let g=[V[victim.type]];for(const x of seq)g.push(x-g[g.length-1]);for(let i=g.length-2;i>=0;i--)g[i]=-Math.max(-g[i],g[i+1]);return g[0]}
+type vColor=Color;

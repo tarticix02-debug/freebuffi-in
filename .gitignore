@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local tooling / session artifacts
+.freebuff/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Logs
+*.log*
+public/assets/engine/stockfish.wasm

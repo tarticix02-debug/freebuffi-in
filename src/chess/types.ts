@@ -1,0 +1,1 @@
+export type Side = 'w' | 'b';  export interface GameSnapshot {   fen: string;   pgn: string;   turn: Side;   isCheck: boolean;   isCheckmate: boolean;   isStalemate: boolean;   isDraw: boolean;   isThreefold: boolean;   isInsufficientMaterial: boolean;   moveNumber: number;   lastMoveSan: string | null; }

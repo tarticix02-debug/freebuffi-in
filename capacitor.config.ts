@@ -1,0 +1,1 @@
+import type {CapacitorConfig} from '@capacitor/cli';const config:CapacitorConfig={appId:'com.ultimatechess.app',appName:'Ultimate Chess',webDir:'dist',server:{androidScheme:'https'},android:{allowMixedContent:false}};export default config;

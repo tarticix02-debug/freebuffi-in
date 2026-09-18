@@ -1,0 +1,2 @@
+import type {ReactNode} from 'react';
+export function Card({children,onClick,disabled=false,className='',ariaLabel}:{children:ReactNode;onClick?:()=>void;disabled?:boolean;className?:string;ariaLabel?:string}){return <button type="button" disabled={disabled} aria-label={ariaLabel} onClick={onClick} className={`card ${onClick&&!disabled?'card--interactive':''} ${disabled?'card--disabled':''} ${className}`}>{children}</button>}

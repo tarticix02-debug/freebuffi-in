@@ -1,0 +1,374 @@
+// CANONICAL SÜRÜM: matchInProgress, matchStartedAt (gerçek süre ölçümü), legalMovesForSquare (terfi tespiti için), ses/haptic tetikleri, başarım değerlendirmesi tek dosyada birleşiktir.
+import { create } from 'zustand';
+import type { Square, Move } from 'chess.js';
+import { ChessGame } from '../chess/ChessGame';
+import { VARIANT_REGISTRY } from '../variants/registry';
+import type { VariantRule, VariantRuntimeState, VariantEvent } from '../variants/types';
+import { useEngineStore } from './engineStore';
+import { saveGame } from '../storage/gameHistoryStore';
+import { getProfile, updateProfile } from '../storage/profileStore';
+import { computeNewRating } from '../services/ratingService';
+import { levelToElo } from '../engine/levels';
+import { evaluateAndPersistAchievements } from '../services/achievementService';
+import { useAchievementToastStore } from './achievementToastStore';
+import { useDailyQuestStore } from './dailyQuestStore';
+import { playSound } from '../services/soundService';
+import { triggerHaptic } from '../services/hapticService';
+import { VariantAIAdapter } from '../variants/ai/VariantAIAdapter';
+
+/** Bir eşleşmenin (match) kimliği. Yeni oyun başlatıldığında artar. */
+type MatchToken = number;
+
+interface GameState {
+  game: ChessGame;
+  orientation: 'w' | 'b';
+  lastMove: { from: string; to: string } | null;
+  checkSquare: string | null;
+  variant: VariantRule | null;
+  variantState: VariantRuntimeState | null;
+  activeVariantEvents: VariantEvent[];
+  vsComputer: boolean;
+  gameOverInfo: { over: boolean; result?: string; winner?: 'w' | 'b' | null; endReason?: 'checkmate' | 'stalemate' | 'draw' | 'resign' } | null;
+  /** Son kaydedilen oyunun id'si — oyun sonu ekranındaki 'İncele' bağlantısı için. */
+  lastSavedGameId: string | null;
+  matchInProgress: boolean;
+  matchStartedAt: number | null;
+  visibilityMask: boolean[][] | null;
+  engineErrorMessage: string | null;
+
+  startClassic: (humanColor: 'w' | 'b', vsComputer: boolean) => void;
+  startVariant: (variantId: string, humanColor: 'w' | 'b') => void;
+  legalMovesForSquare: (square: Square) => Move[];
+  playMove: (from: Square, to: Square, promotion?: string) => Promise<void>;
+  performVariantAction: (type: string, payload: any) => { success: boolean; reason?: string };
+  requestComputerMoveIfNeeded: () => Promise<void>;
+  resignGame: () => Promise<void>;
+  canUndo: () => boolean;
+  undoLastMove: () => Promise<void>;
+}
+
+// --- Eşleşme yarışı (race) koruması -----------------------------------------
+// Uzun süren bir motor analizi ("bilgisayar düşünüyor…") beklenirken kullanıcı
+// yeni bir oyun başlatırsa, eski eşleşmenin gelen cevabı YENİ tahtayı
+// bozmamalıdır. Her eşleşme bir token alır; asenkron işler tamamlanınca
+// token hâlâ güncel mi diye bakılır, değilse sonuç çöpe gider.
+let matchTokenCounter = 0;
+const tokenOf = new WeakMap<object, MatchToken>();
+function tokenFor(state: object): MatchToken | undefined {
+  return tokenOf.get(state);
+}
+
+/** Uzun süren asenkron iş (motor cevabı vb.) bu maçta hâlâ geçerli mi? */
+function isMatchCurrent(game: ChessGame, myToken: MatchToken | undefined): boolean {
+  return useGameStore.getState().game === game && tokenFor(game) === myToken;
+}
+
+function moveEndsGame(snap: ReturnType<ChessGame['snapshot']>): boolean {
+  return snap.isCheckmate || snap.isStalemate || snap.isDraw;
+}
+
+export const useGameStore = create<GameState>((set, get) => ({
+  game: new ChessGame(),
+
+  // Not: DEV modunda window'a teşhir edilir (aşağıda) — e2e doğrulama ve
+  // hata ayıklama için modül-örneği belirsizliğini ortadan kaldırır.
+  orientation: 'w',
+  lastMove: null,
+  checkSquare: null,
+  variant: null,
+  variantState: null,
+  activeVariantEvents: [],
+  vsComputer: false,
+  gameOverInfo: null,
+  lastSavedGameId: null,
+  matchInProgress: false,
+  matchStartedAt: null,
+  visibilityMask: null,
+  engineErrorMessage: null,
+
+  startClassic: (humanColor, vsComputer) => {
+    const game = new ChessGame();
+    set({
+      game, orientation: humanColor, variant: null, variantState: null, vsComputer,
+      lastMove: null, gameOverInfo: null, lastSavedGameId: null, visibilityMask: null,
+      matchInProgress: true, matchStartedAt: Date.now(),
+      activeVariantEvents: [], engineErrorMessage: null,
+    });
+    tokenOf.set(game, ++matchTokenCounter); // bekleyen eski motor cevaplarını geçersiz kılar
+    playSound('gameStart');
+    if (vsComputer) useEngineStore.getState().init();
+    get().requestComputerMoveIfNeeded();
+  },
+
+  startVariant: (variantId, humanColor) => {
+    const rule = VARIANT_REGISTRY[variantId];
+    if (!rule || rule.status !== 'implemented') {
+      console.error(`Varyant "${variantId}" henüz uygulanmadı.`);
+      return;
+    }
+    const game = new ChessGame();
+    const variantState = rule.initialize(game);
+    const mask = rule.getVisibilityMask ? rule.getVisibilityMask(variantState, humanColor) : null;
+    set({
+      game, variant: rule, variantState, orientation: humanColor, vsComputer: true,
+      lastMove: null, gameOverInfo: null, lastSavedGameId: null, visibilityMask: mask,
+      matchInProgress: true, matchStartedAt: Date.now(),
+      activeVariantEvents: [], engineErrorMessage: null,
+    });
+    tokenOf.set(game, ++matchTokenCounter);
+    playSound('gameStart');
+    useEngineStore.getState().init();
+    get().requestComputerMoveIfNeeded();
+  },
+
+  legalMovesForSquare: (square) => {
+    const { game, variant, variantState } = get();
+    const moves = game.legalMoves(square);
+    if (!variant?.onBeforeMove || !variantState) return moves;
+    return moves.filter((m) => variant.onBeforeMove!(variantState, game, m.from as Square, m.to as Square).allowed);
+  },
+
+  playMove: async (from, to, promotion) => {
+    const { game, variant, variantState } = get();
+    const myToken = tokenFor(game);
+    if (variant?.onBeforeMove && variantState) {
+      const guard = variant.onBeforeMove(variantState, game, from, to);
+      if (!guard.allowed) return;
+    }
+    const mv = game.move({ from, to, promotion });
+    if (!mv) return;
+
+    let events: VariantEvent[] = [];
+    if (variant?.onAfterMove && variantState) events = variant.onAfterMove(variantState, game);
+
+    const snap = game.snapshot();
+    const mask = variant?.getVisibilityMask && variantState ? variant.getVisibilityMask(variantState, get().orientation) : get().visibilityMask;
+
+    // UNO Chess (bonusMoveFor) ve Treasure Chess (extraTurnFor) sandığı: bazı
+    // varyantlar hamleyi oynayan tarafa GERÇEK ekstra hamle verebilir. chess.js
+    // sırayı rakibe çevirdiği için, hamle oyunu bitirmiyorsa active color'ı
+    // forceActiveColor ile tekrar hamle sahibine çeviriyoruz.
+    const bonusState = variantState;
+    const bonusMoveFor = bonusState?.customData?.['bonusMoveFor'] ?? bonusState?.customData?.['extraTurnFor'];
+    const variantGrantsBonus =
+      typeof bonusMoveFor === 'string' &&
+      bonusMoveFor === (snap.turn === 'w' ? 'b' : 'w') && // hamleyi oynayan taraf
+      !moveEndsGame(snap);
+    if (variantGrantsBonus && bonusState) {
+      // Bayrağı tüket: aksi halde ekstra hamleler sonsuza dek tekrar eder.
+      // (UNO kendi bayrağını onAfterMove içinde yönetir; generic okuma yalnızca
+      // Treasure gibi yönetilmeyen varyantlar için devreye girer.)
+      delete bonusState.customData['bonusMoveFor'];
+      delete bonusState.customData['extraTurnFor'];
+      game.forceActiveColor(bonusMoveFor as 'w' | 'b');
+    }
+
+    set({
+      game, lastMove: { from, to },
+      checkSquare: snap.isCheck ? findKingSquare(game, snap.turn) : null,
+      activeVariantEvents: events, visibilityMask: mask,
+      ...(variantGrantsBonus && bonusState ? { variantState: { ...bonusState } } : {}),
+    });
+
+    if (snap.isCheckmate) { playSound('checkmate'); triggerHaptic('heavy'); }
+    else if (mv.captured) { playSound('capture'); triggerHaptic('medium'); }
+    else if (snap.isCheck) { playSound('check'); triggerHaptic('medium'); }
+    else { playSound('move'); triggerHaptic('light'); }
+
+    if (moveEndsGame(snap)) {
+      // lichess benzeri bitiş sesi: mat zaten 'checkmate' tonu çaldı; diğer
+      // bitişlerde (pat/berabere/teslim dışı draw) 'gameEnd' kapanış tonu.
+      if (!snap.isCheckmate) playSound('gameEnd');
+      await persistFinishedGame(get());
+      set({
+        gameOverInfo: {
+          over: true,
+          // Detaylı ekran bilgisi PlayScreen'de chess.com düzeninde kurulur.
+          result: snap.isCheckmate ? 'checkmate' : snap.isStalemate ? 'stalemate' : 'draw',
+          winner: snap.isCheckmate ? (snap.turn === 'w' ? 'b' : 'w') : null,
+          endReason: snap.isCheckmate ? 'checkmate' : snap.isStalemate ? 'stalemate' : 'draw',
+        },
+        matchInProgress: false,
+      });
+      return;
+    }
+
+    // Ekstra hamle verildiğinde sıra hamleyi oynananda kalır.
+    // requestComputerMoveIfNeeded sıra insanda ise no-op'tur, yapay zekadaysa
+    // (Treasure sandığı yapay zekâya denk gelirse) zinciri devam ettirir.
+    await get().requestComputerMoveIfNeeded();
+  },
+
+  performVariantAction: (type, payload) => {
+    const { game, variant, variantState, orientation } = get();
+    if (!variant?.applyCustomAction || !variantState) {
+      return { success: false, reason: 'Bu varyant özel eylem desteklemiyor.' };
+    }
+    const actingColor = game.raw.turn();
+    const result = variant.applyCustomAction(variantState, game, { type, payload }, actingColor);
+    if (result.success) {
+      const mask = variant.getVisibilityMask ? variant.getVisibilityMask(variantState, orientation) : get().visibilityMask;
+      set({ activeVariantEvents: result.events, visibilityMask: mask, variantState: { ...variantState } });
+      playSound('move');
+    }
+    return { success: result.success, reason: result.reason };
+  },
+
+  requestComputerMoveIfNeeded: async () => {
+    const { game, orientation, vsComputer, variant, variantState } = get();
+    if (!vsComputer) return;
+    if (game.raw.turn() === orientation) return;
+
+    const myToken = tokenFor(game);
+    let engineStore = useEngineStore.getState();
+    try {
+      if (variant) {
+        const aiColor = game.raw.turn();
+        if (variant.decideAIPreMoveAction && variant.applyCustomAction && variantState) {
+          const action = variant.decideAIPreMoveAction(variantState, game, aiColor);
+          if (action) {
+            const actionResult = variant.applyCustomAction(variantState, game, action, aiColor);
+            if (actionResult.success) {
+              const mask = variant.getVisibilityMask ? variant.getVisibilityMask(variantState, orientation) : get().visibilityMask;
+              set({ activeVariantEvents: actionResult.events, visibilityMask: mask, variantState: { ...variantState } });
+            }
+          }
+        }
+        const legal = game.legalMoves().filter((m) =>
+          !variant.onBeforeMove || (variantState && variant.onBeforeMove(variantState, game, m.from as Square, m.to as Square).allowed)
+        );
+        if (!legal.length) return;
+        if (!variantState) return;
+
+        // Varyant rakibi: Stockfish önerisi varyant kurallarına göre filtrelenir
+        // (VariantAIAdapter); motor yoksa/uymazsa materyal-farkında greedy seçim.
+        const adapter = new VariantAIAdapter(engineStore.engine);
+        const pick = await adapter.pickMove(game, variantState, (f, t) =>
+          !variant.onBeforeMove || (variantState ? variant.onBeforeMove(variantState, game, f as Square, t as Square).allowed : true)
+        );
+        if (!pick) return;
+        if (!isMatchCurrent(game, myToken)) return; // bu sırada maç değişti/tesslim edildi
+        await get().playMove(pick.from as Square, pick.to as Square, pick.promotion);
+      } else {
+        if (engineStore.status === 'LOADING' || engineStore.status === 'ERROR') {
+          set({ engineErrorMessage: null });
+          await engineStore.init();
+          engineStore = useEngineStore.getState();
+        }
+        if (engineStore.status === 'LOADING' || engineStore.status === 'ERROR') {
+          set({ engineErrorMessage: engineStore.errorMessage ?? 'Satranç motoru başlatılamadı.' });
+          return;
+        }
+        set({ engineErrorMessage: null });
+        const result = await engineStore.requestBestMove(game.fen());
+        if (!result.bestMove) return;
+        if (!isMatchCurrent(game, myToken)) return; // bu sırada maç değişti/tesslim edildi
+        const from = result.bestMove.slice(0, 2) as Square;
+        const to = result.bestMove.slice(2, 4) as Square;
+        const promotion = result.bestMove.slice(4) || undefined;
+        await get().playMove(from, to, promotion);
+      }
+    } catch (e) {
+      if (!isMatchCurrent(game, myToken)) return; // eski maçın hatası yeni maça sızmaz
+      console.error('Bilgisayar hamlesi alınamadı:', e);
+      set({ engineErrorMessage: (e as Error).message ?? 'Bilgisayar hamlesi alınamadı.' });
+    }
+  },
+
+  resignGame: async () => {
+    const { game, matchInProgress, orientation } = get();
+    if (!matchInProgress) return;
+    tokenOf.set(game, ++matchTokenCounter); // havada kalan motor cevabını iptal et
+    set({
+      gameOverInfo: { over: true, result: 'Teslim oldunuz', winner: orientation === 'w' ? 'b' : 'w', endReason: 'resign' },
+      matchInProgress: false,
+      engineErrorMessage: null,
+    });
+    playSound('gameEnd');
+    // Kayıt/puan/başarım işleri TEK SAHİBİ olan persistFinishedGame'de;
+    // teslim normal bir kayıp gibi puanlanır (mat ile biten kayıpla aynı kural).
+    await persistFinishedGame(get(), 'loss');
+  },
+
+  canUndo: () => {
+    const { game, vsComputer, orientation, matchInProgress, variant } = get();
+    if (!matchInProgress) return false;
+    if (variant) return false; // varyant tahtası put/remove ile değişir; güvenli geri alma yok
+    if (!vsComputer) return game.raw.history().length >= 2;
+    // Bilgisayara karşı: sıra oyuncudaysa son iki hamle (bilgisayar + oyuncu) geri alınır.
+    return game.raw.turn() === orientation && game.raw.history().length >= 2;
+  },
+
+  undoLastMove: async () => {
+    if (!get().canUndo()) return;
+    const { game } = get();
+    tokenOf.set(game, ++matchTokenCounter); // bekleyen motor cevabını iptal et
+    game.raw.undo();
+    game.raw.undo();
+    const snap = game.snapshot();
+    set({
+      game,
+      lastMove: lastMoveFromHistory(game),
+      checkSquare: snap.isCheck ? findKingSquare(game, snap.turn) : null,
+      engineErrorMessage: null,
+    });
+  },
+}));
+
+// E2e test ve hata ayıklama köprüsü: modül-örneği belirsizliğine (çift HMR
+// importu) takılmadan her zaman CANONICAL store'a erişim verir.
+if (typeof window !== 'undefined') {
+  (window as any).__gameStore = useGameStore;
+}
+
+function lastMoveFromHistory(game: ChessGame): { from: string; to: string } | null {
+  const history = game.raw.history({ verbose: true });
+  const last = history[history.length - 1];
+  return last ? { from: last.from, to: last.to } : null;
+}
+
+function findKingSquare(game: ChessGame, color: 'w' | 'b'): string | null {
+  const board = game.board();
+  for (const row of board) for (const c of row) if (c && c.type === 'k' && c.color === color) return c.square;
+  return null;
+}
+
+/**
+ * Oyun sonu kaydının TEK sahibi: puan güncellemesi, geçmişe kayıt,
+ * lastSavedGameId, başarım ve günlük görev değerlendirmesi hepsi burada.
+ * forcedResult, tahtadan okunamayan bitişler içindir (teslim = 'loss').
+ */
+async function persistFinishedGame(state: GameState, forcedResult?: 'win' | 'loss' | 'draw') {
+  const snap = state.game.snapshot();
+  const result: 'win' | 'loss' | 'draw' = forcedResult ?? (snap.isDraw || snap.isStalemate ? 'draw'
+    : snap.isCheckmate ? (snap.turn !== state.orientation ? 'win' : 'loss') : 'draw');
+
+  const mode = state.variant?.id ?? (state.vsComputer ? 'vs-computer' : 'classic');
+  const isRated = mode === 'classic' || mode === 'vs-computer';
+
+  let ratingBefore = 0, ratingAfter = 0;
+  if (isRated) {
+    const profile = await getProfile();
+    ratingBefore = profile.rating;
+    const engineLevel = useEngineStore.getState().level;
+    ratingAfter = computeNewRating(ratingBefore, levelToElo(engineLevel), result);
+    await updateProfile({ rating: ratingAfter });
+  }
+
+  const durationSeconds = state.matchStartedAt ? Math.round((Date.now() - state.matchStartedAt) / 1000) : 0;
+
+  const saved = await saveGame({
+    date: Date.now(), mode,
+    opponent: state.vsComputer ? `Stockfish (Lv. ${useEngineStore.getState().level})` : 'Yerel Oyuncu',
+    userColor: state.orientation, result, pgn: snap.pgn, finalFen: snap.fen,
+    moveCount: state.game.raw.history().length, durationSeconds, ratingBefore, ratingAfter,
+  });
+  useGameStore.setState({ lastSavedGameId: saved.id });
+
+  const newly = await evaluateAndPersistAchievements();
+  if (newly.length) useAchievementToastStore.getState().push(newly);
+
+  try {
+    await useDailyQuestStore.getState().refreshAndNotify();
+  } catch (e) { console.error('Görev değerlendirmesi başarısız:', e); }
+}
