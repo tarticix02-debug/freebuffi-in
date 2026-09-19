@@ -13,3 +13,4 @@ tsconfig.tsbuildinfo
 # Logs
 *.log*
 public/assets/engine/stockfish.wasm
+*.apk

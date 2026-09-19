@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ultimate Chess</string>
+    <string name="title_activity_main">Ultimate Chess</string>
+    <string name="package_name">com.ultimatechess.app</string>
+    <string name="custom_url_scheme">com.ultimatechess.app</string>
+</resources>
