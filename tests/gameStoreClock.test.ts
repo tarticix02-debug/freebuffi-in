@@ -60,4 +60,24 @@ describe('gameStore süre bitişi (flag-fall)', () => {
     expect(useGameStore.getState().matchInProgress).toBe(true);
     expect(useGameStore.getState().gameOverInfo).toBeNull();
   });
+
+  it('undo, oynayan tarafın saatini hamle öncesine iade eder (chess.com semantiği)', async () => {
+    const store = useGameStore.getState();
+    await store.playMove('e2', 'e4'); // beyaz oynar, süresinden düşer +2s increment
+    const afterMove = useGameStore.getState().clock!;
+    await store.playMove('e7', 'e5');
+    await store.playMove('g1', 'f3');
+    await store.playMove('b8', 'c6');
+    expect(useGameStore.getState().canUndo()).toBe(true);
+
+    await useGameStore.getState().undoLastMove();
+
+    const s = useGameStore.getState();
+    // Undo sonrası saat, SON hamle öncesi anlık görüntüye dönmeli:
+    // süre tam başlangıç değerine yakın (elapsed iade edildi, increment geri alındı).
+    expect(s.clock).not.toBeNull();
+    expect(s.clock!.whiteMs).toBeGreaterThanOrEqual(299_000); // 300sn'e döndü (±1s tolerans)
+    expect(s.game.raw.history().length).toBe(2); // iki hamle geri alındı
+    expect(s.clockSnapshots.length).toBe(3); // son hamle çiftinin snapshot'ı düşürüldü
+  });
 });

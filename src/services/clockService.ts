@@ -42,19 +42,33 @@ export function initialClock(control: TimeControl, firstTurn: 'w' | 'b'): ClockS
 /**
  * Hamle tamamlandığında saati güncelle: işleyen taraftan geçen süre düşer,
  * increment eklenir, sıra rakibe geçer. Sınırsız saatte state değişmez.
+ * Döndürülen ikinci değer: hamle ÖNCESİ saat anlık görüntüsü — chess.com
+ * semantiğinde geri alma, oynayan tarafın süresini bununla geri yükler.
  */
-export function applyMoveToClock(clock: ClockState, control: TimeControl, mover: 'w' | 'b'): ClockState {
-  if (!isTimed(control)) return clock;
-  if (clock.activeColor !== mover) return clock; // savunma: sırası olmayan düşmez
+export function applyMoveToClock(clock: ClockState, control: TimeControl, mover: 'w' | 'b'): [ClockState, ClockState] {
+  if (!isTimed(control)) return [clock, clock];
+  if (clock.activeColor !== mover) return [clock, clock]; // savunma: sırası olmayan düşmez
+  const snapshot: ClockState = { ...clock, turnStartedAt: null };
   const elapsed = clock.turnStartedAt !== null ? Date.now() - clock.turnStartedAt : 0;
   const moverMs = Math.max(0, (mover === 'w' ? clock.whiteMs : clock.blackMs) - elapsed)
     + control.incrementSeconds * 1000;
-  return {
+  return [{
     whiteMs: mover === 'w' ? moverMs : clock.whiteMs,
     blackMs: mover === 'b' ? moverMs : clock.blackMs,
     activeColor: mover === 'w' ? 'b' : 'w',
     turnStartedAt: Date.now(),
-  };
+  }, snapshot];
+}
+
+/**
+ * Geri alma: chess.com semantiği — oynanan hamlelerin süresi iade edilir.
+ * Verilen anlık görüntüler (her biri hamle ÖNCESİ saat) sondan geriye uygulanır;
+ * tek görüntü = tek hamlenin iadesi. Sıra, görüntüdeki tarafa döner.
+ */
+export function restoreClockFromSnapshots(current: ClockState | null, snapshots: ClockState[]): ClockState | null {
+  if (!snapshots.length) return current;
+  const s = snapshots[snapshots.length - 1];
+  return { ...s, turnStartedAt: Date.now() };
 }
 
 /** Görüntülenebilir anlık kalan süre (tick için). */
@@ -80,17 +94,28 @@ export function flaggedColor(clock: ClockState, at: number = Date.now()): 'w' | 
 }
 
 /**
+ * Tahta materyali — TEK yardımcı: her iki kavram (beraberlik önerisindeki
+ * üstünlük ölçüsü ile bayrak bitişindeki kral-dışı tarama) bunu tüketir.
+ */
+const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+export function countMaterial(board: ({ type: string; color: 'w' | 'b' } | null)[][]): { white: number; black: number; nonKingOf: (c: 'w' | 'b') => boolean } {
+  let white = 0, black = 0;
+  let whiteNonKing = false, blackNonKing = false;
+  for (const row of board) for (const cell of row) {
+    if (!cell) continue;
+    const v = PIECE_VALUES[cell.type] ?? 0;
+    if (cell.color === 'w') { white += v; if (cell.type !== 'k') whiteNonKing = true; }
+    else { black += v; if (cell.type !== 'k') blackNonKing = true; }
+  }
+  return { white, black, nonKingOf: (c) => (c === 'w' ? whiteNonKing : blackNonKing) };
+}
+
+/**
  * Bayrak düşen tarafın RAKİBİNİN kazanmaya hakkı var mı?
  * Rakipte kral dışı taş yoksa süre kazanımı beraberliktir (FIDE kuralı).
  */
 export function timeoutWinner(flagged: 'w' | 'b', board: ({ type: string; color: 'w' | 'b' } | null)[][]): 'win' | 'draw' {
-  const winnerColor = flagged === 'w' ? 'b' : 'w';
-  for (const row of board) {
-    for (const cell of row) {
-      if (cell && cell.color === winnerColor && cell.type !== 'k') return 'win';
-    }
-  }
-  return 'draw';
+  return countMaterial(board).nonKingOf(flagged === 'w' ? 'b' : 'w') ? 'win' : 'draw';
 }
 
 /** mm:ss.d biçimi; 20sn altında onda birler gösterilir (chess.com davranışı). */

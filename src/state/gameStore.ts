@@ -16,7 +16,8 @@ import { playSound } from '../services/soundService';
 import { triggerHaptic } from '../services/hapticService';
 import { VariantAIAdapter } from '../variants/ai/VariantAIAdapter';
 import {
-  TIME_CONTROLS, initialClock, applyMoveToClock, flaggedColor, timeoutWinner,
+  TIME_CONTROLS, initialClock, applyMoveToClock, restoreClockFromSnapshots,
+  flaggedColor, timeoutWinner, countMaterial,
   type ClockState, type TimeControl,
 } from '../services/clockService';
 
@@ -44,6 +45,8 @@ interface GameState {
   /** Kurulu oyun saati (yalnızca süreli oyunlarda non-null). */
   clock: ClockState | null;
   clockControl: TimeControl;
+  /** Hamle öncesi saat anlık görüntüleri — undo chess.com semantiğiyle süre iadesi için. */
+  clockSnapshots: ClockState[];
 
   startClassic: (humanColor: 'w' | 'b', vsComputer: boolean, timeControlId?: string) => void;
   startVariant: (variantId: string, humanColor: 'w' | 'b') => void;
@@ -84,6 +87,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   drawOfferRejectedAt: null,
   clock: null,
   clockControl: TIME_CONTROLS[0].control,
+  clockSnapshots: [],
 
   // Not: DEV modunda window'a teşhir edilir (aşağıda) — e2e doğrulama ve
   // hata ayıklama için modül-örneği belirsizliğini ortadan kaldırır.
@@ -112,6 +116,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       activeVariantEvents: [], engineErrorMessage: null,
       clockControl: control,
       clock: timed ? initialClock(control, 'w') : null,
+      clockSnapshots: [],
       drawOfferRejectedAt: null,
     });
     tokenOf.set(game, ++matchTokenCounter); // bekleyen eski motor cevaplarını geçersiz kılar
@@ -159,11 +164,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!mv) return;
 
     // Saat: hamleyi oynayanın süresinden geçen süre düşer, increment eklenir,
-    // sıra rakibe geçer. Ardından bayrak kontrolü (hamle öncesi süre zaten
-    // düşmüş olabilir — düşen taraf hemen kaybeder).
+    // sıra rakibe geçer. Hamle öncesi anlık görüntü saklanır (undo iadesi).
+    // Ardından bayrak kontrolü — düşen taraf hemen kaybeder.
     if (get().clock) {
-      const updated = applyMoveToClock(get().clock!, get().clockControl, mv.color);
-      set({ clock: updated });
+      const [updated, snapshot] = applyMoveToClock(get().clock!, get().clockControl, mv.color);
+      set({ clock: updated, clockSnapshots: [...get().clockSnapshots, snapshot] });
       await checkFlagFall();
       if (!get().matchInProgress) return; // bayrak düştü, zincir durur
     }
@@ -308,16 +313,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   resignGame: async () => {
     const { game, matchInProgress, orientation } = get();
     if (!matchInProgress) return;
-    tokenOf.set(game, ++matchTokenCounter); // havada kalan motor cevabını iptal et
-    set({
-      gameOverInfo: { over: true, result: 'Teslim oldunuz', winner: orientation === 'w' ? 'b' : 'w', endReason: 'resign' },
-      matchInProgress: false,
-      engineErrorMessage: null,
+    await endGame({
+      endReason: 'resign',
+      resultText: 'Teslim oldunuz',
+      winner: orientation === 'w' ? 'b' : 'w',
+      forcedResult: 'loss', // teslim, mat ile biten kayıpla aynı puanlanır
     });
-    playSound('gameEnd');
-    // Kayıt/puan/başarım işleri TEK SAHİBİ olan persistFinishedGame'de;
-    // teslim normal bir kayıp gibi puanlanır (mat ile biten kayıpla aynı kural).
-    await persistFinishedGame(get(), 'loss');
   },
 
   /**
@@ -332,24 +333,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     const snap = game.snapshot();
     if (snap.isCheckmate || snap.isStalemate || snap.isDraw) return; // zaten bitti/bitior
     if (!vsComputer) {
-      await finalizeDraw('Karşılıklı anlaşma ile beraberlik');
+      await endGame({ endReason: 'draw', resultText: 'Karşılıklı anlaşma ile beraberlik', winner: null, forcedResult: 'draw' });
       return;
     }
-    // Üstünlük ölçüsü: hamle dengesizliğini yok sayan basit materyal sayımı.
-    const vals: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-    let myMaterial = 0, oppMaterial = 0;
-    for (const row of game.board()) for (const cell of row) {
-      if (!cell) continue;
-      const v = vals[cell.type] ?? 0;
-      if (cell.color === orientation) myMaterial += v; else oppMaterial += v;
-    }
+    // Üstünlük ölçüsü: TEK materyal yardımcısından.
+    const mat = countMaterial(game.board());
+    const myMaterial = orientation === 'w' ? mat.white : mat.black;
+    const oppMaterial = orientation === 'w' ? mat.black : mat.white;
     if (myMaterial > oppMaterial + 1) {
       // Öneren üstün: motor reddeder, kısa geri bildirim.
       set({ drawOfferRejectedAt: snap.moveNumber });
       playSound('gameEnd');
       return;
     }
-    await finalizeDraw('Motor beraberlik önerisini kabul etti');
+    await endGame({ endReason: 'draw', resultText: 'Motor beraberlik önerisini kabul etti', winner: null, forcedResult: 'draw' });
   },
 
   /** Saniyelik tick: süreli maçta bayrak düştü mü? Düştüyse oyunu kapat. */
@@ -368,16 +365,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   undoLastMove: async () => {
     if (!get().canUndo()) return;
-    const { game } = get();
+    const { game, clockSnapshots } = get();
     tokenOf.set(game, ++matchTokenCounter); // bekleyen motor cevabını iptal et
     game.raw.undo();
     game.raw.undo();
     const snap = game.snapshot();
+    // chess.com semantiği: geri alınan hamlelerin süresi iade edilir.
+    const clock = restoreClockFromSnapshots(get().clock, clockSnapshots.slice(-1));
     set({
       game,
       lastMove: lastMoveFromHistory(game),
       checkSquare: snap.isCheck ? findKingSquare(game, snap.turn) : null,
       engineErrorMessage: null,
+      ...(clock ? { clock, clockSnapshots: clockSnapshots.slice(0, -1) } : {}),
     });
   },
 }));
@@ -406,38 +406,51 @@ function findKingSquare(game: ChessGame, color: 'w' | 'b'): string | null {
  * forcedResult, tahtadan okunamayan bitişler içindir (teslim = 'loss').
  */
 /**
- * Bayrak kontrolü: süreli maçta bir tarafın süresi bittiyse oyunu kapat.
- * Kazanan kuralı: bayrakta olanın RAKİBİ kral dışı taş varsa 'win' (süre
- * kazanımı), yalnızca kral varsa beraberlik (FIDE). Kayıt persistFinishedGame
- * üzerinden — mat/teslim ile aynı yol (overlay, puan, inceleme hepsi oradan).
+ * Oyun bitişinin TEK sahibi: overlay kurar, kapanış sesi çalar,
+ * persistFinishedGame ile kaydeder (puan, geçmiş, başarım, görev).
+ * Dört bitiş yolu (mat, teslim, beraberlik, bayrak) buraya iner.
  */
-let flagFallInProgress = false;
-async function checkFlagFall() {
-  const s = useGameStore.getState();
-  if (!s.matchInProgress || !s.clock || flagFallInProgress) return;
-  const flagged = flaggedColor(s.clock);
-  if (!flagged) return;
-  flagFallInProgress = true;
+let endGameInFlight = false;
+async function endGame(opts: {
+  endReason: 'checkmate' | 'stalemate' | 'draw' | 'resign' | 'timeout';
+  resultText: string;
+  winner: 'w' | 'b' | null;
+  forcedResult: 'win' | 'loss' | 'draw';
+}): Promise<void> {
+  if (endGameInFlight) return; // çift tetikleme: iki tick / tick+hamle yarışı
+  endGameInFlight = true;
   try {
-    const { game } = s;
+    const { game } = useGameStore.getState();
     tokenOf.set(game, ++matchTokenCounter); // havada kalan motor cevabını iptal et
-    const winner = timeoutWinner(flagged, game.board());
-    const winnerText = winner === 'draw' ? null : (flagged === 'w' ? 'b' : 'w');
     useGameStore.setState({
-      gameOverInfo: {
-        over: true,
-        result: winner === 'draw' ? 'Süre bitti — beraberlik' : 'Süre bitti',
-        winner: winnerText,
-        endReason: winner === 'draw' ? 'draw' as const : 'timeout' as const, // UI 'Süre bitti' gerekçesiyle gösterir
-      },
+      gameOverInfo: { over: true, result: opts.resultText, winner: opts.winner, endReason: opts.endReason },
       matchInProgress: false,
       engineErrorMessage: null,
     });
     playSound('gameEnd');
-    await persistFinishedGame(useGameStore.getState(), winner === 'draw' ? 'draw' : (flagged === s.orientation ? 'loss' : 'win'));
+    await persistFinishedGame(useGameStore.getState(), opts.forcedResult);
   } finally {
-    flagFallInProgress = false;
+    endGameInFlight = false;
   }
+}
+
+/**
+ * Bayrak kontrolü: süreli maçta bir tarafın süresi bittiyse oyunu kapat.
+ * Kazanan kuralı: bayrakta olanın RAKİBİ kral dışı taş varsa 'win' (süre
+ * kazanımı), yalnızca kral varsa beraberlik (FIDE).
+ */
+async function checkFlagFall() {
+  const s = useGameStore.getState();
+  if (!s.matchInProgress || !s.clock) return;
+  const flagged = flaggedColor(s.clock);
+  if (!flagged) return;
+  const winner = timeoutWinner(flagged, s.game.board());
+  await endGame({
+    endReason: winner === 'draw' ? 'draw' : 'timeout',
+    resultText: winner === 'draw' ? 'Süre bitti — beraberlik' : 'Süre bitti',
+    winner: winner === 'draw' ? null : (flagged === 'w' ? 'b' : 'w'),
+    forcedResult: winner === 'draw' ? 'draw' : (flagged === s.orientation ? 'loss' : 'win'),
+  });
 }
 
 // Süreli maçlarda saniyelik bayrak-tick. Maç yokken interval no-op'tur.
@@ -446,19 +459,6 @@ if (typeof window !== 'undefined') {
     const s = useGameStore.getState();
     if (s.matchInProgress && s.clock) void useGameStore.getState().tickClock();
   }, 1000);
-}
-
-/** Beraberliği kapat: overlay kur, ses çal, tek sahip persistFinishedGame ile kaydet. */
-async function finalizeDraw(resultText: string) {
-  const { game } = useGameStore.getState();
-  tokenOf.set(game, ++matchTokenCounter);
-  useGameStore.setState({
-    gameOverInfo: { over: true, result: resultText, winner: null, endReason: 'draw' },
-    matchInProgress: false,
-    engineErrorMessage: null,
-  });
-  playSound('gameEnd');
-  await persistFinishedGame(useGameStore.getState(), 'draw');
 }
 
  async function persistFinishedGame(state: GameState, forcedResult?: 'win' | 'loss' | 'draw') {
