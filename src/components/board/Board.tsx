@@ -7,7 +7,7 @@ import { getSettings, type AppSettings } from '../../storage/settingsStore';
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
-export function Board() {
+export function Board({ hintSquares }: { hintSquares?: string[] }) {
   const { game, orientation, lastMove, checkSquare, variant, variantState, visibilityMask, vsComputer, legalMovesForSquare, playMove } = useGameStore();
   const [selected, setSelected] = useState<Square | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -64,6 +64,7 @@ export function Board() {
             const isCaptureTarget = isTarget && Boolean(cell); // dolu kare = taş alma hedefi
             const isLastMove = settings?.showLastMoveHighlight !== false && (lastMove?.from === square || lastMove?.to === square);
             const isCheck = checkSquare === square;
+            const isHint = Boolean(hintSquares?.includes(square));
             // Şah mat anında mat edilen kralın karesi dolgun kırmızı yanar (chess.com).
             const isCheckmate = isCheck && useGameStore.getState().gameOverInfo?.endReason === 'checkmate';
             const decoKind = decorationMap.get(square);
@@ -84,6 +85,7 @@ export function Board() {
                   isLastMove && 'square--last-move',
                   isCheck && 'square--check',
                   isCheckmate && 'square--checkmate',
+                  isHint && 'square--hint',
                   decoKind && `square--${decoKind}`,
                 ].filter(Boolean).join(' ')}
                 onClick={() => onSquareClick(square)}

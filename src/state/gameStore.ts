@@ -15,6 +15,10 @@ import { useDailyQuestStore } from './dailyQuestStore';
 import { playSound } from '../services/soundService';
 import { triggerHaptic } from '../services/hapticService';
 import { VariantAIAdapter } from '../variants/ai/VariantAIAdapter';
+import {
+  TIME_CONTROLS, initialClock, applyMoveToClock, flaggedColor, timeoutWinner,
+  type ClockState, type TimeControl,
+} from '../services/clockService';
 
 /** Bir eşleşmenin (match) kimliği. Yeni oyun başlatıldığında artar. */
 type MatchToken = number;
@@ -28,7 +32,7 @@ interface GameState {
   variantState: VariantRuntimeState | null;
   activeVariantEvents: VariantEvent[];
   vsComputer: boolean;
-  gameOverInfo: { over: boolean; result?: string; winner?: 'w' | 'b' | null; endReason?: 'checkmate' | 'stalemate' | 'draw' | 'resign' } | null;
+  gameOverInfo: { over: boolean; result?: string; winner?: 'w' | 'b' | null; endReason?: 'checkmate' | 'stalemate' | 'draw' | 'resign' | 'timeout' } | null;
   /** Son kaydedilen oyunun id'si — oyun sonu ekranındaki 'İncele' bağlantısı için. */
   lastSavedGameId: string | null;
   matchInProgress: boolean;
@@ -37,8 +41,11 @@ interface GameState {
   engineErrorMessage: string | null;
   /** Motorun en son beraberlik önerisini reddettiği hamle numarası (UI geri bildirimi için). */
   drawOfferRejectedAt: number | null;
+  /** Kurulu oyun saati (yalnızca süreli oyunlarda non-null). */
+  clock: ClockState | null;
+  clockControl: TimeControl;
 
-  startClassic: (humanColor: 'w' | 'b', vsComputer: boolean) => void;
+  startClassic: (humanColor: 'w' | 'b', vsComputer: boolean, timeControlId?: string) => void;
   startVariant: (variantId: string, humanColor: 'w' | 'b') => void;
   legalMovesForSquare: (square: Square) => Move[];
   playMove: (from: Square, to: Square, promotion?: string) => Promise<void>;
@@ -46,6 +53,8 @@ interface GameState {
   requestComputerMoveIfNeeded: () => Promise<void>;
   resignGame: () => Promise<void>;
   offerDraw: () => Promise<void>;
+  /** Süreli oyunda saniyede bir çağrılır: bayrak kontrolü + canlı tick. */
+  tickClock: () => Promise<void>;
   canUndo: () => boolean;
   undoLastMove: () => Promise<void>;
 }
@@ -73,6 +82,8 @@ function moveEndsGame(snap: ReturnType<ChessGame['snapshot']>): boolean {
 export const useGameStore = create<GameState>((set, get) => ({
   game: new ChessGame(),
   drawOfferRejectedAt: null,
+  clock: null,
+  clockControl: TIME_CONTROLS[0].control,
 
   // Not: DEV modunda window'a teşhir edilir (aşağıda) — e2e doğrulama ve
   // hata ayıklama için modül-örneği belirsizliğini ortadan kaldırır.
@@ -90,13 +101,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   visibilityMask: null,
   engineErrorMessage: null,
 
-  startClassic: (humanColor, vsComputer) => {
+  startClassic: (humanColor, vsComputer, timeControlId) => {
     const game = new ChessGame();
+    const control = TIME_CONTROLS.find((t) => t.id === timeControlId)?.control ?? TIME_CONTROLS[0].control;
+    const timed = control.initialSeconds > 0;
     set({
       game, orientation: humanColor, variant: null, variantState: null, vsComputer,
       lastMove: null, gameOverInfo: null, lastSavedGameId: null, visibilityMask: null,
       matchInProgress: true, matchStartedAt: Date.now(),
       activeVariantEvents: [], engineErrorMessage: null,
+      clockControl: control,
+      clock: timed ? initialClock(control, 'w') : null,
+      drawOfferRejectedAt: null,
     });
     tokenOf.set(game, ++matchTokenCounter); // bekleyen eski motor cevaplarını geçersiz kılar
     playSound('gameStart');
@@ -141,6 +157,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     const mv = game.move({ from, to, promotion });
     if (!mv) return;
+
+    // Saat: hamleyi oynayanın süresinden geçen süre düşer, increment eklenir,
+    // sıra rakibe geçer. Ardından bayrak kontrolü (hamle öncesi süre zaten
+    // düşmüş olabilir — düşen taraf hemen kaybeder).
+    if (get().clock) {
+      const updated = applyMoveToClock(get().clock!, get().clockControl, mv.color);
+      set({ clock: updated });
+      await checkFlagFall();
+      if (!get().matchInProgress) return; // bayrak düştü, zincir durur
+    }
 
     let events: VariantEvent[] = [];
     if (variant?.onAfterMove && variantState) events = variant.onAfterMove(variantState, game);
@@ -326,6 +352,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     await finalizeDraw('Motor beraberlik önerisini kabul etti');
   },
 
+  /** Saniyelik tick: süreli maçta bayrak düştü mü? Düştüyse oyunu kapat. */
+  tickClock: async () => {
+    await checkFlagFall();
+  },
+
   canUndo: () => {
     const { game, vsComputer, orientation, matchInProgress, variant } = get();
     if (!matchInProgress) return false;
@@ -374,6 +405,49 @@ function findKingSquare(game: ChessGame, color: 'w' | 'b'): string | null {
  * lastSavedGameId, başarım ve günlük görev değerlendirmesi hepsi burada.
  * forcedResult, tahtadan okunamayan bitişler içindir (teslim = 'loss').
  */
+/**
+ * Bayrak kontrolü: süreli maçta bir tarafın süresi bittiyse oyunu kapat.
+ * Kazanan kuralı: bayrakta olanın RAKİBİ kral dışı taş varsa 'win' (süre
+ * kazanımı), yalnızca kral varsa beraberlik (FIDE). Kayıt persistFinishedGame
+ * üzerinden — mat/teslim ile aynı yol (overlay, puan, inceleme hepsi oradan).
+ */
+let flagFallInProgress = false;
+async function checkFlagFall() {
+  const s = useGameStore.getState();
+  if (!s.matchInProgress || !s.clock || flagFallInProgress) return;
+  const flagged = flaggedColor(s.clock);
+  if (!flagged) return;
+  flagFallInProgress = true;
+  try {
+    const { game } = s;
+    tokenOf.set(game, ++matchTokenCounter); // havada kalan motor cevabını iptal et
+    const winner = timeoutWinner(flagged, game.board());
+    const winnerText = winner === 'draw' ? null : (flagged === 'w' ? 'b' : 'w');
+    useGameStore.setState({
+      gameOverInfo: {
+        over: true,
+        result: winner === 'draw' ? 'Süre bitti — beraberlik' : 'Süre bitti',
+        winner: winnerText,
+        endReason: winner === 'draw' ? 'draw' as const : 'timeout' as const, // UI 'Süre bitti' gerekçesiyle gösterir
+      },
+      matchInProgress: false,
+      engineErrorMessage: null,
+    });
+    playSound('gameEnd');
+    await persistFinishedGame(useGameStore.getState(), winner === 'draw' ? 'draw' : (flagged === s.orientation ? 'loss' : 'win'));
+  } finally {
+    flagFallInProgress = false;
+  }
+}
+
+// Süreli maçlarda saniyelik bayrak-tick. Maç yokken interval no-op'tur.
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    const s = useGameStore.getState();
+    if (s.matchInProgress && s.clock) void useGameStore.getState().tickClock();
+  }, 1000);
+}
+
 /** Beraberliği kapat: overlay kur, ses çal, tek sahip persistFinishedGame ile kaydet. */
 async function finalizeDraw(resultText: string) {
   const { game } = useGameStore.getState();

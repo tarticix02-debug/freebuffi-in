@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import type { Square } from 'chess.js';
 import { useGameStore } from '../state/gameStore';
 import { useEngineStore } from '../state/engineStore';
 import { VARIANT_REGISTRY } from '../variants/registry';
@@ -10,6 +11,7 @@ import { UnoHand } from '../components/variants/uno/UnoHand';
 import { MoveClassIcon, CLASS_LABELS } from '../components/review/MoveClassIcon';
 import { analyzeGame, type GameReviewResult } from '../services/gameReviewService';
 import { pickKeyChips } from '../services/reviewKeyChips';
+import { TIME_CONTROLS, formatClock, remainingMs, isTimed, type TimeControl } from '../services/clockService';
 
 export function PlayScreen() {
   const { variantId } = useParams();
@@ -19,6 +21,11 @@ export function PlayScreen() {
   const [pendingColor, setPendingColor] = useState<'w' | 'b'>('w');
   const [pendingOpponent, setPendingOpponent] = useState<'computer' | 'local'>('computer');
   const [pendingLevel, setPendingLevel] = useState<number>(8);
+  const [pendingTimeControl, setPendingTimeControl] = useState<string>('unlimited');
+  const [hintUci, setHintUci] = useState<{ from: string; to: string } | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
+  const [hintCooldownUntil, setHintCooldownUntil] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const [confirmResign, setConfirmResign] = useState(false);
   const [drawOfferPending, setDrawOfferPending] = useState(false);
 
@@ -26,10 +33,50 @@ export function PlayScreen() {
   // NOT: Hook'lar erken return'den ÖNCE çağrılmalı (Rules of Hooks).
   const historyLen = useGameStore((s) => s.game.raw.history().length);
   const historySan = useGameStore((s) => s.game.raw.history());
+  const clock = useGameStore((s) => s.clock);
+  const clockControl = useGameStore((s) => s.clockControl);
   const moveListRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { moveListRef.current?.scrollTo({ top: moveListRef.current.scrollHeight }); }, [historyLen]);
 
+  // Canlı saat: süreli maçta 200ms'de bir yeniden çiz (bayrak zaten store tick'inde).
+  useEffect(() => {
+    if (!clock) return;
+    const id = setInterval(() => setClockNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, [clock]);
+
+  // Hamle değişince ipucu gösterimi temizlenir (eski hamle için ok kalmasın).
+  useEffect(() => { setHintUci(null); }, [historyLen]);
+
   const rule = variantId ? VARIANT_REGISTRY[variantId] : null;
+
+  // İpucu: motorun en iyi hamlesini al, tahtada vurgula. Rate-limit: 10sn'de bir;
+  // motor hâlâ yükleniyorsa zarifçe vazgeç (çift-init düzeltmesi sonrası
+  // initInFlight sözünü paylaşır ama 113MB wasm'da ilk saniyeler makul bir bekleme).
+  async function requestHint() {
+    if (hintLoading || Date.now() < hintCooldownUntil) return;
+    setHintLoading(true);
+    try {
+      const es = useEngineStore.getState();
+      if (es.status === 'LOADING' || es.status === 'ERROR') {
+        await Promise.race([es.init(), new Promise((r) => setTimeout(r, 4000))]);
+      }
+      const st = useEngineStore.getState();
+      if (st.status === 'LOADING' || st.status === 'ERROR') return; // sessizce vazgeç
+      const result = await st.requestBestMove(useGameStore.getState().game.fen());
+      if (!result.bestMove) return;
+      const current = useGameStore.getState();
+      if (current.game.raw.turn() !== current.orientation) return; // sıra geçti
+      const from = result.bestMove.slice(0, 2);
+      const to = result.bestMove.slice(2, 4);
+      const legal = current.game.legalMoves(from as Square);
+      if (!legal.some((m) => m.to === to)) return; // motor sürprizi: gösterme
+      setHintUci({ from, to });
+      setHintCooldownUntil(Date.now() + 10_000);
+    } catch { /* motor hatası: sessizce vazgeç */ }
+    finally { setHintLoading(false); }
+  }
+
   if (variantId && (!rule || rule.status !== 'implemented')) {
     return (
       <div className="state-panel">
@@ -72,6 +119,21 @@ export function PlayScreen() {
               </div>
             </div>
 
+            <div className="setup-panel__group">
+              <h3>Süre</h3>
+              <div className="setup-panel__choices setup-panel__choices--wrap">
+                {TIME_CONTROLS.map((t) => (
+                  <Button
+                    key={t.id}
+                    variant={pendingTimeControl === t.id ? 'primary' : 'secondary'}
+                    onClick={() => setPendingTimeControl(t.id)}
+                  >
+                    {t.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
             {pendingOpponent === 'computer' && (
               <div className="setup-panel__group">
                 <h3>Zorluk</h3>
@@ -95,7 +157,7 @@ export function PlayScreen() {
 
         <Button onClick={() => {
           if (variantId) startVariant(variantId, pendingColor);
-          else startClassic(pendingColor, pendingOpponent === 'computer');
+          else startClassic(pendingColor, pendingOpponent === 'computer', pendingTimeControl);
         }}>
           Oyunu Başlat
         </Button>
@@ -122,6 +184,18 @@ export function PlayScreen() {
             )}
           </div>
 
+          {clock && isTimed(clockControl) && (() => {
+            const rem = remainingMs(clock, clockNow);
+            const lowTime = rem.whiteMs < 30_000 || rem.blackMs < 30_000;
+            return (
+              <div className="clock-row" role="timer" aria-label="Kalan süre">
+                <span className={`clock-chip ${clock.activeColor === 'w' ? 'clock-chip--active' : ''} ${lowTime && rem.whiteMs < 30_000 ? 'clock-chip--low' : ''}`}>♔ {formatClock(rem.whiteMs)}</span>
+                <span className="clock-row__vs">{clockControl.initialSeconds}+{clockControl.incrementSeconds}</span>
+                <span className={`clock-chip ${clock.activeColor === 'b' ? 'clock-chip--active' : ''} ${lowTime && rem.blackMs < 30_000 ? 'clock-chip--low' : ''}`}>♚ {formatClock(rem.blackMs)}</span>
+              </div>
+            );
+          })()}
+
           <div className="play-screen__actions">
             <Button variant="secondary" disabled={!undoAvailable} onClick={() => { setConfirmResign(false); undoLastMove(); }}>
               ↩ Geri Al
@@ -142,7 +216,27 @@ export function PlayScreen() {
             ) : (
               <Button variant="secondary" onClick={() => setDrawOfferPending(true)}>½ Beraberlik</Button>
             )}
+            {!variantId && !vsComputer && (
+              <Button variant="secondary" onClick={() => {
+                useGameStore.setState({ orientation: orientation === 'w' ? 'b' : 'w' });
+              }}>⇅ Çevir</Button>
+            )}
+            {!variant && vsComputer && game.raw.turn() === orientation && (
+              <Button
+                variant="secondary"
+                disabled={hintLoading || Date.now() < hintCooldownUntil}
+                title="Motorun önerdiği en iyi hamleyi tahtada göster"
+                onClick={() => { void requestHint(); }}
+              >{hintLoading ? '💡 …' : '💡 İpucu'}</Button>
+            )}
           </div>
+
+          {hintUci && (
+            <div className="hint-banner" role="status">
+              <p className="draw-banner__msg">💡 Öneri: {hintUci.from} → {hintUci.to} (tahtada vurgulu)</p>
+              <Button variant="ghost" onClick={() => setHintUci(null)}>Tamam</Button>
+            </div>
+          )}
 
           {drawOfferRejectedAt !== null && (
             <div className="draw-banner" role="status">
@@ -164,7 +258,7 @@ export function PlayScreen() {
         <p className="engine-loading-note">Motor ilk kez yükleniyor, birkaç saniye sürebilir…</p>
       )}
 
-      <Board />
+      <Board hintSquares={hintUci ? [hintUci.from, hintUci.to] : undefined} />
 
       {movePairs.length > 0 && (
         <div className="move-list-panel" ref={moveListRef} aria-label="Hamle listesi">
@@ -248,6 +342,7 @@ function GameOverOverlay({ info, vsComputer, humanColor, isVariant, gameId, onRe
   const reasonText = info.endReason === 'checkmate' ? 'Şah mat sonucu'
     : info.endReason === 'stalemate' ? 'Pat (beraberlik) sebebiyle'
     : info.endReason === 'resign' ? (iWon ? 'Rakibin çekilmesi üzerine' : 'Teslim olma üzerine')
+    : info.endReason === 'timeout' ? (isDraw ? 'Süre bitti — rakipte yetersiz materyal' : 'Süre bitti')
     : 'Beraberlik sebebiyle';
 
   const title = isDraw ? 'Beraberlik' : iWon ? 'Zafer' : 'Yenilgi';
