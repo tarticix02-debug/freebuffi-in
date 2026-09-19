@@ -72,3 +72,41 @@ currentWinStreak, longestWinStreak: longest,
 byMode,
 };
 }
+
+export interface TimeControlStat { label: string; games: number; wins: number; losses: number; draws: number; winRate: number; }
+
+const TIME_CONTROL_LABELS: Record<string, string> = {
+  unlimited: 'Sınırsız',
+  'blitz3+2': '3+2',
+  'blitz5+0': '5+0',
+  'rapid10+0': '10+0',
+  timed: 'Süreli',
+  unknown: 'Bilinmeyen',
+};
+
+/**
+ * Saat modu kırılımı — TEK saf yardımcı. Kayıtlarda timeControlId yoksa
+ * (eski kayıtlar) 'unknown' kovasına düşer; bilinen id'ler etiketlenir.
+ * Sıra: bilinen modlar TIME_CONTROLS sırasıyla, sonra unknown.
+ */
+export function computeTimeControlStats(games: GameRecord[], knownOrder: { id: string; label: string }[]): Record<string, TimeControlStat> {
+  const out: Record<string, TimeControlStat> = {};
+  const bucketOf = (g: GameRecord): string => g.timeControlId ?? 'unknown';
+  for (const g of games) {
+    const id = bucketOf(g);
+    out[id] ??= { label: TIME_CONTROL_LABELS[id] ?? id, games: 0, wins: 0, losses: 0, draws: 0, winRate: 0 };
+    const m = out[id];
+    m.games++;
+    if (g.result === 'win') m.wins++;
+    else if (g.result === 'loss') m.losses++;
+    else m.draws++;
+  }
+  for (const m of Object.values(out)) m.winRate = m.games ? (m.wins / m.games) * 100 : 0;
+  // Bilinen sıraya göre düzenle; sadece oyunu olan kovular kalır.
+  const ordered: Record<string, TimeControlStat> = {};
+  for (const { id, label } of knownOrder) {
+    if (out[id]) { ordered[id] = { ...out[id], label }; delete out[id]; }
+  }
+  for (const [id, stat] of Object.entries(out)) ordered[id] = stat;
+  return ordered;
+}

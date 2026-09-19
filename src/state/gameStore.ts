@@ -485,6 +485,7 @@ if (typeof window !== 'undefined') {
     opponent: state.vsComputer ? `Stockfish (Lv. ${useEngineStore.getState().level})` : 'Yerel Oyuncu',
     userColor: state.orientation, result, pgn: snap.pgn, finalFen: snap.fen,
     moveCount: state.game.raw.history().length, durationSeconds, ratingBefore, ratingAfter,
+    timeControlId: state.clock ? TIME_CONTROLS.find((t) => t.control === state.clockControl)?.id ?? 'timed' : 'unlimited',
   });
   useGameStore.setState({ lastSavedGameId: saved.id });
 

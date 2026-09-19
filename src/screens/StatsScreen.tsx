@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAllGames, type GameRecord } from '../storage/gameHistoryStore';
-import { computeStats, type UserStats } from '../services/statsService';
+import { computeStats, computeTimeControlStats, type UserStats } from '../services/statsService';
+import { TIME_CONTROLS } from '../services/clockService';
 import { computeOpeningPerformance, type OpeningPerformance } from '../services/openingStatsService';
 import { StatChip } from '../components/common/StatChip';
 
@@ -44,6 +45,16 @@ export function StatsScreen() {
           <StatChip label="Ort. Hamle" value={stats.avgMoveCount.toFixed(0)} />
           <StatChip label="Ort. Süre" value={`${Math.round(stats.avgDurationSeconds / 60)} dk`} />
         </div>
+      </section>
+
+      <section>
+        <h2>Süreye Göre</h2>
+        {Object.entries(computeTimeControlStats(games, TIME_CONTROLS)).map(([id, s]) => (
+          <div key={id} className="mode-stats-row">
+            <span>{s.label}</span>
+            <span>{s.games} oyun · {s.wins}G {s.losses}K {s.draws}B · %{s.winRate.toFixed(0)} kazanma</span>
+          </div>
+        ))}
       </section>
 
       <section>

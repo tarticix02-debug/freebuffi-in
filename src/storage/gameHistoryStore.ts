@@ -14,6 +14,8 @@ moveCount: number;
 durationSeconds: number;
 ratingBefore: number;
 ratingAfter: number;
+/** Saat modu: TIME_CONTROLS id'si ('blitz3+2'…) veya 'unlimited'. Eski kayıtlarda yok — helper 'unknown' sayar. */
+timeControlId?: string;
 }
 
 export async function saveGame(record: Omit<GameRecord, 'id'>): Promise<GameRecord> {
