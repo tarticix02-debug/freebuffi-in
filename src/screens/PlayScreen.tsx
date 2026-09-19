@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../state/gameStore';
 import { useEngineStore } from '../state/engineStore';
@@ -14,12 +14,20 @@ import { pickKeyChips } from '../services/reviewKeyChips';
 export function PlayScreen() {
   const { variantId } = useParams();
   const navigate = useNavigate();
-  const { matchInProgress, gameOverInfo, vsComputer, variant, variantState, orientation, activeVariantEvents, engineErrorMessage, game, startClassic, startVariant, resignGame, canUndo, undoLastMove } = useGameStore();
+  const { matchInProgress, gameOverInfo, vsComputer, variant, variantState, orientation, activeVariantEvents, engineErrorMessage, game, startClassic, startVariant, resignGame, offerDraw, canUndo, undoLastMove, drawOfferRejectedAt } = useGameStore();
   const engineStatus = useEngineStore((s) => s.status);
   const [pendingColor, setPendingColor] = useState<'w' | 'b'>('w');
   const [pendingOpponent, setPendingOpponent] = useState<'computer' | 'local'>('computer');
   const [pendingLevel, setPendingLevel] = useState<number>(8);
   const [confirmResign, setConfirmResign] = useState(false);
+  const [drawOfferPending, setDrawOfferPending] = useState(false);
+
+  // Hamle listesi: her render'da history'den türetilir; otomatik kaydırma için ref.
+  // NOT: Hook'lar erken return'den ÖNCE çağrılmalı (Rules of Hooks).
+  const historyLen = useGameStore((s) => s.game.raw.history().length);
+  const historySan = useGameStore((s) => s.game.raw.history());
+  const moveListRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { moveListRef.current?.scrollTo({ top: moveListRef.current.scrollHeight }); }, [historyLen]);
 
   const rule = variantId ? VARIANT_REGISTRY[variantId] : null;
   if (variantId && (!rule || rule.status !== 'implemented')) {
@@ -96,6 +104,11 @@ export function PlayScreen() {
   }
 
   const undoAvailable = canUndo();
+  const history = historySan;
+  const movePairs: { num: number; white?: string; black?: string }[] = [];
+  for (let i = 0; i < history.length; i += 2) {
+    movePairs.push({ num: i / 2 + 1, white: history[i], black: history[i + 1] });
+  }
 
   return (
     <div className="play-screen">
@@ -121,7 +134,22 @@ export function PlayScreen() {
             ) : (
               <Button variant="secondary" onClick={() => setConfirmResign(true)}>🏳 Teslim Ol</Button>
             )}
+            {drawOfferPending ? (
+              <>
+                <Button variant="primary" onClick={() => { setDrawOfferPending(false); offerDraw(); }}>½ Beraberlik öner</Button>
+                <Button variant="secondary" onClick={() => setDrawOfferPending(false)}>Vazgeç</Button>
+              </>
+            ) : (
+              <Button variant="secondary" onClick={() => setDrawOfferPending(true)}>½ Beraberlik</Button>
+            )}
           </div>
+
+          {drawOfferRejectedAt !== null && (
+            <div className="draw-banner" role="status">
+              <p className="draw-banner__msg">Motor beraberlik önerisini reddetti — üstün olduğun için devam ediyor.</p>
+              <Button variant="ghost" onClick={() => useGameStore.setState({ drawOfferRejectedAt: null })}>Tamam</Button>
+            </div>
+          )}
         </>
       )}
 
@@ -137,6 +165,16 @@ export function PlayScreen() {
       )}
 
       <Board />
+
+      {movePairs.length > 0 && (
+        <div className="move-list-panel" ref={moveListRef} aria-label="Hamle listesi">
+          <div className="move-list-panel__grid">
+            {movePairs.map(({ num, white, black }) => (
+              <MovePair key={num} num={num} white={white} black={black} latestIndex={history.length - 1} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {variant?.id === 'uno' && <UnoHand color={orientation} />}
 
@@ -156,6 +194,19 @@ export function PlayScreen() {
         onHome={() => navigate('/')}
       />}
     </div>
+  );
+}
+
+/** Oyun içi hamle listesi satırı: "1. e4 e5" biçiminde, son hamle vurgulu. */
+function MovePair({ num, white, black, latestIndex }: { num: number; white?: string; black?: string; latestIndex: number }) {
+  const wIdx = (num - 1) * 2;
+  const bIdx = wIdx + 1;
+  return (
+    <>
+      <span className="move-list-panel__num">{num}.</span>
+      <span className={`move-list-panel__san ${wIdx === latestIndex ? 'move-list-panel__san--latest' : ''}`}>{white ?? ''}</span>
+      <span className={`move-list-panel__san ${bIdx === latestIndex ? 'move-list-panel__san--latest' : ''}`}>{black ?? ''}</span>
+    </>
   );
 }
 

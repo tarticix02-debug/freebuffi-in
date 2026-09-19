@@ -24,6 +24,7 @@ language: 'tr' | 'en';
 legalMoveHighlights: boolean;
 showLastMoveHighlight: boolean;
 autoPromoteToQueen: boolean;
+showCoordinates: boolean;
 puzzleGenProcessedGameIds: string[];
 }
 
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 id: SETTINGS_ID, theme: 'dark', accentColor: '#4f8cff', boardTheme: 'classic',
 soundEnabled: true, soundVolume: 0.8, hapticEnabled: true, analysisDepth: 18, language: 'tr',
 legalMoveHighlights: true, showLastMoveHighlight: true, autoPromoteToQueen: false,
+showCoordinates: true,
 puzzleGenProcessedGameIds: [],
 };
 

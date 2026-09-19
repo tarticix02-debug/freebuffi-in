@@ -40,5 +40,6 @@ setHapticEnabled: (v: boolean) => patch({ hapticEnabled: v }),
 setLegalMoveHighlights: (v: boolean) => patch({ legalMoveHighlights: v }),
 setShowLastMoveHighlight: (v: boolean) => patch({ showLastMoveHighlight: v }),
 setAutoPromoteToQueen: (v: boolean) => patch({ autoPromoteToQueen: v }),
+setShowCoordinates: (v: boolean) => patch({ showCoordinates: v }),
 };
 }

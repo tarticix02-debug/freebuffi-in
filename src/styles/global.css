@@ -123,3 +123,22 @@ input[type=range]{accent-color:var(--accent);width:140px}
 .import-panel__file-label{display:inline-flex;align-items:center;cursor:pointer}
 .import-panel__file-label input{display:none}
 .import-panel__error{color:var(--danger);font-size:13px;margin:0}.engine-error-banner{background:#3a1f1f;border:1px solid var(--danger);border-radius:var(--radius-md);padding:var(--space-3);color:#ffb4b4}.engine-error-banner__hint{font-size:11px;opacity:0.8;margin-top:4px}.engine-loading-note{text-align:center;color:var(--text-secondary);font-size:12px}.quest-list{display:flex;flex-direction:column;gap:var(--space-2)}.quest-item{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-3)}.quest-item--done{border-color:var(--success)}.quest-item__row{display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px}.quest-item__count{color:var(--text-secondary);font-size:12px}.quests-screen__note{color:var(--text-secondary);font-size:12px;text-align:center}.achievement-toast__icon,.quest-toast__icon{font-size:24px}.setting-row{display:flex;justify-content:space-between;align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--border-subtle)}.setting-row:last-child{border-bottom:0}.promotion-picker__cancel{margin-top:var(--space-3);background:none;border:0;color:var(--text-secondary);cursor:pointer}.home-screen{display:flex;flex-direction:column;gap:var(--space-5);padding-bottom:var(--space-6)}.state-panel--error{color:var(--danger)}.spinner--small{width:14px;height:14px;border-width:2px;display:inline-block;margin:0;vertical-align:middle}.play-screen__thinking{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}.puzzle-screen__header{display:flex;flex-wrap:wrap;gap:var(--space-2)}.puzzle-screen__board{display:flex;justify-content:center}.puzzle-screen__feedback{text-align:center}.puzzle-screen__themes{display:flex;flex-wrap:wrap;justify-content:center;gap:4px}.puzzle-feedback{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-4)}.puzzle-feedback--success{border-color:var(--success)}.puzzle-feedback--fail{border-color:var(--danger)}.puzzle-feedback--wrong{background:none;border:0;color:var(--danger);padding:4px 0;font-size:13px;font-weight:600}.puzzle-feedback__solution{font-size:13px;color:var(--text-secondary);margin-top:6px}.welcome-screen{min-height:100vh;display:grid;place-items:center;padding:var(--space-5);background:var(--bg-base)}.welcome-screen__card{max-width:380px;text-align:center;display:flex;flex-direction:column;gap:var(--space-3)}.welcome-screen__card h1{font-size:22px;margin:0}.welcome-screen__card p{color:var(--text-secondary);font-size:14px;line-height:1.5}.welcome-screen__label{font-size:13px;color:var(--text-secondary);text-align:left;margin-top:var(--space-2)}.welcome-screen__input{width:100%;padding:var(--space-3);border-radius:var(--radius-md);border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-size:16px;box-sizing:border-box}
+
+/* ---- Tahta koordinatları (lichess tarzı kenar içi etiketler) ---- */
+.square__coord{position:absolute;font-size:clamp(8px,1.6vw,12px);font-weight:700;pointer-events:none;opacity:.85}
+.square__coord--file{bottom:2px;right:3px}
+.square__coord--rank{top:2px;left:3px}
+.square__coord--on-light{color:var(--board-dark)}
+.square__coord--on-dark{color:var(--board-light)}
+
+/* ---- Oyun içi hamle listesi ---- */
+.move-list-panel{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-2);max-height:180px;overflow-y:auto}
+.move-list-panel__grid{display:grid;grid-template-columns:auto 1fr 1fr;gap:2px 8px;font-size:13px;align-items:center}
+.move-list-panel__num{color:var(--text-secondary);font-size:12px;text-align:right}
+.move-list-panel__san{padding:2px 6px;border-radius:4px;font-weight:600;cursor:default}
+.move-list-panel__san--latest{background:var(--accent);color:#fff}
+.move-list-panel__empty{color:var(--text-secondary);font-size:12px;text-align:center;padding:var(--space-2)}
+
+/* ---- Beraberlik önerisi ---- */
+.draw-banner{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;gap:var(--space-2);align-items:center;justify-content:center;flex-wrap:wrap}
+.draw-banner__msg{font-size:13px;color:var(--text-secondary);margin:0}

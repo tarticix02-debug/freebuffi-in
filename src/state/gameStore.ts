@@ -35,6 +35,8 @@ interface GameState {
   matchStartedAt: number | null;
   visibilityMask: boolean[][] | null;
   engineErrorMessage: string | null;
+  /** Motorun en son beraberlik önerisini reddettiği hamle numarası (UI geri bildirimi için). */
+  drawOfferRejectedAt: number | null;
 
   startClassic: (humanColor: 'w' | 'b', vsComputer: boolean) => void;
   startVariant: (variantId: string, humanColor: 'w' | 'b') => void;
@@ -43,6 +45,7 @@ interface GameState {
   performVariantAction: (type: string, payload: any) => { success: boolean; reason?: string };
   requestComputerMoveIfNeeded: () => Promise<void>;
   resignGame: () => Promise<void>;
+  offerDraw: () => Promise<void>;
   canUndo: () => boolean;
   undoLastMove: () => Promise<void>;
 }
@@ -69,6 +72,7 @@ function moveEndsGame(snap: ReturnType<ChessGame['snapshot']>): boolean {
 
 export const useGameStore = create<GameState>((set, get) => ({
   game: new ChessGame(),
+  drawOfferRejectedAt: null,
 
   // Not: DEV modunda window'a teşhir edilir (aşağıda) — e2e doğrulama ve
   // hata ayıklama için modül-örneği belirsizliğini ortadan kaldırır.
@@ -290,6 +294,38 @@ export const useGameStore = create<GameState>((set, get) => ({
     await persistFinishedGame(get(), 'loss');
   },
 
+  /**
+   * Beraberlik önerisi (chess.com davranışı). Motor kabulü basit ve dürüst
+   * kuralla: öneren taraf objective olarak ÜSTÜNDEYSE motor reddeder
+   * (kabul etseydi kandırılmış olurdu); üstün değilse kabul eder. Yerel
+   * oyunda iki oyuncu da kabul eder.
+   */
+  offerDraw: async () => {
+    const { game, matchInProgress, vsComputer, orientation, variant } = get();
+    if (!matchInProgress || variant) return;
+    const snap = game.snapshot();
+    if (snap.isCheckmate || snap.isStalemate || snap.isDraw) return; // zaten bitti/bitior
+    if (!vsComputer) {
+      await finalizeDraw('Karşılıklı anlaşma ile beraberlik');
+      return;
+    }
+    // Üstünlük ölçüsü: hamle dengesizliğini yok sayan basit materyal sayımı.
+    const vals: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+    let myMaterial = 0, oppMaterial = 0;
+    for (const row of game.board()) for (const cell of row) {
+      if (!cell) continue;
+      const v = vals[cell.type] ?? 0;
+      if (cell.color === orientation) myMaterial += v; else oppMaterial += v;
+    }
+    if (myMaterial > oppMaterial + 1) {
+      // Öneren üstün: motor reddeder, kısa geri bildirim.
+      set({ drawOfferRejectedAt: snap.moveNumber });
+      playSound('gameEnd');
+      return;
+    }
+    await finalizeDraw('Motor beraberlik önerisini kabul etti');
+  },
+
   canUndo: () => {
     const { game, vsComputer, orientation, matchInProgress, variant } = get();
     if (!matchInProgress) return false;
@@ -338,7 +374,20 @@ function findKingSquare(game: ChessGame, color: 'w' | 'b'): string | null {
  * lastSavedGameId, başarım ve günlük görev değerlendirmesi hepsi burada.
  * forcedResult, tahtadan okunamayan bitişler içindir (teslim = 'loss').
  */
-async function persistFinishedGame(state: GameState, forcedResult?: 'win' | 'loss' | 'draw') {
+/** Beraberliği kapat: overlay kur, ses çal, tek sahip persistFinishedGame ile kaydet. */
+async function finalizeDraw(resultText: string) {
+  const { game } = useGameStore.getState();
+  tokenOf.set(game, ++matchTokenCounter);
+  useGameStore.setState({
+    gameOverInfo: { over: true, result: resultText, winner: null, endReason: 'draw' },
+    matchInProgress: false,
+    engineErrorMessage: null,
+  });
+  playSound('gameEnd');
+  await persistFinishedGame(useGameStore.getState(), 'draw');
+}
+
+ async function persistFinishedGame(state: GameState, forcedResult?: 'win' | 'loss' | 'draw') {
   const snap = state.game.snapshot();
   const result: 'win' | 'loss' | 'draw' = forcedResult ?? (snap.isDraw || snap.isStalemate ? 'draw'
     : snap.isCheckmate ? (snap.turn !== state.orientation ? 'win' : 'loss') : 'draw');

@@ -22,7 +22,7 @@ const DEPTH_OPTIONS = [
 export function SettingsScreen() {
   const {
     settings, setTheme, setAccent, setBoardTheme, setSoundEnabled, setSoundVolume,
-    setHapticEnabled, setLegalMoveHighlights, setShowLastMoveHighlight, setAutoPromoteToQueen, setAnalysisDepth,
+    setHapticEnabled, setLegalMoveHighlights, setShowLastMoveHighlight, setAutoPromoteToQueen, setAnalysisDepth, setShowCoordinates,
   } = useTheme();
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -94,6 +94,7 @@ export function SettingsScreen() {
         <ToggleRow label="Geçerli hamle göstergeleri" value={settings.legalMoveHighlights} onChange={setLegalMoveHighlights} />
         <ToggleRow label="Son hamle vurgusu" value={settings.showLastMoveHighlight} onChange={setShowLastMoveHighlight} />
         <ToggleRow label="Otomatik vezir terfisi" value={settings.autoPromoteToQueen} onChange={setAutoPromoteToQueen} />
+        <ToggleRow label="Tahta koordinatları (a-h, 1-8)" value={settings.showCoordinates} onChange={(v) => { setShowCoordinates(v); announce(v ? 'Koordinatlar açık' : 'Koordinatlar kapalı'); }} />
       </SettingsSection>
 
       <SettingsSection title="Analiz">

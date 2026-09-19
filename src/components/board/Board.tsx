@@ -68,6 +68,9 @@ export function Board() {
             const isCheckmate = isCheck && useGameStore.getState().gameOverInfo?.endReason === 'checkmate';
             const decoKind = decorationMap.get(square);
             const isVisible = !visibilityMask || visibilityMask[rowIdx][colIdx];
+            const showCoord = settings?.showCoordinates !== false;
+            const isEdgeFile = showCoord && rank === (orientation === 'w' ? 1 : 8);
+            const isEdgeRank = showCoord && file === (orientation === 'w' ? 'h' : 'a');
 
             return (
               <button
@@ -88,6 +91,8 @@ export function Board() {
               >
                 {cell && isVisible && <PieceIcon type={cell.type} color={cell.color} />}
                 {isTarget && !cell && <span className="square__dot" />}
+                {isEdgeFile && <span className={`square__coord square__coord--file ${isDark ? 'square__coord--on-dark' : 'square__coord--on-light'}`}>{file}</span>}
+                {isEdgeRank && <span className={`square__coord square__coord--rank ${isDark ? 'square__coord--on-dark' : 'square__coord--on-light'}`}>{rank}</span>}
                 {decoKind === 'teleport-pad' && <span className="square__teleport-icon">◎</span>}
               </button>
             );
