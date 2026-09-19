@@ -153,3 +153,25 @@ input[type=range]{accent-color:var(--accent);width:140px}
 /* ---- İpucu vurgusu ---- */
 .square--hint{outline:3px dashed var(--accent);outline-offset:-3px}
 .hint-banner{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;gap:var(--space-2);align-items:center;justify-content:center;flex-wrap:wrap}
+
+/* ---- Çok oyunculu kurulum ---- */
+.mp-setup{display:flex;flex-direction:column;gap:var(--space-2)}
+.mp-setup__join{display:flex;gap:var(--space-2);align-items:center}
+.mp-setup__code-input{width:110px;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);background:var(--bg-card);color:var(--text-primary);font-family:monospace;font-size:18px;letter-spacing:3px;text-transform:uppercase;text-align:center}
+.mp-setup__error{color:var(--danger);font-size:13px;margin:0}
+.mp-status{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:14px}
+.mp-status__ok{color:var(--success);font-style:normal;font-weight:700}
+
+/* ---- Profesyonel UI cila katmanı ---- */
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+h1 { font-size: 24px; font-weight: 800; }
+h2 { font-size: 17px; font-weight: 700; }
+.bottom-nav { backdrop-filter: blur(10px); box-shadow: 0 -2px 12px rgba(0,0,0,0.15); }
+.bottom-nav__item { border-radius: 10px; transition: background var(--transition-fast), color var(--transition-fast); }
+.bottom-nav__item--active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.card { transition: border-color var(--transition-fast), transform var(--transition-fast); }
+.card--interactive:hover { border-color: var(--accent); transform: translateY(-1px); }
+.btn { transition: filter var(--transition-fast), transform var(--transition-fast); }
+.btn:not(:disabled):hover { filter: brightness(1.08); }
+.btn:not(:disabled):active { transform: scale(0.98); }
+.setup-panel__choices .btn { min-width: 96px; }

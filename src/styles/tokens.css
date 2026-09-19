@@ -1,7 +1,7 @@
 :root {
---font-display: 'Manrope', 'Segoe UI', sans-serif;
---font-body: 'Inter', 'Segoe UI', sans-serif;
---font-mono: 'JetBrains Mono', monospace;
+--font-display: 'Manrope', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+--font-body: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+--font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 
 --radius-sm: 8px; --radius-md: 14px; --radius-lg: 20px;
 --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
@@ -16,19 +16,20 @@
 }
 
 [data-theme='dark'] {
---bg-base: #0f1115; --bg-elevated: #171a21; --bg-card: #1c2029;
---border-subtle: #2a2f3a;
---text-primary: #f4f6fa; --text-secondary: #9aa3b2;
---accent: var(--accent-color, #4f8cff);
---board-light: #eef1f6; --board-dark: #7a8ba3;
---success: #35c975; --warning: #f5a623; --danger: #ef4444;
+/* chess.com'un koyu temasına yakın nötr-mavi gri merdiveni */
+--bg-base: #161512; --bg-elevated: #262421; --bg-card: #302e2b;
+--border-subtle: #3d3a35;
+--text-primary: #f2f1ee; --text-secondary: #a09c96;
+--accent: var(--accent-color, #81b64c);
+--board-light: #edd9b7; --board-dark: #b58863;
+--success: #81b64c; --warning: #e8a33d; --danger: #e05555;
 }
 
 [data-theme='light'] {
---bg-base: #f6f7fb; --bg-elevated: #ffffff; --bg-card: #ffffff;
---border-subtle: #e3e6ee;
---text-primary: #12141a; --text-secondary: #5b6272;
---accent: var(--accent-color, #2f6fed);
---board-light: #f5f5f5; --board-dark: #7f9db9;
---success: #1f9d55; --warning: #b9760a; --danger: #d92d20;
+--bg-base: #f4f2ee; --bg-elevated: #ffffff; --bg-card: #ffffff;
+--border-subtle: #e4e1db;
+--text-primary: #26241f; --text-secondary: #6b675f;
+--accent: var(--accent-color, #6da13f);
+--board-light: #f0d9b5; --board-dark: #b58863;
+--success: #5d8c2f; --warning: #a9770f; --danger: #c9382e;
 }

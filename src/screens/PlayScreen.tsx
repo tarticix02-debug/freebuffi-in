@@ -12,6 +12,7 @@ import { MoveClassIcon, CLASS_LABELS } from '../components/review/MoveClassIcon'
 import { analyzeGame, type GameReviewResult } from '../services/gameReviewService';
 import { pickKeyChips } from '../services/reviewKeyChips';
 import { TIME_CONTROLS, formatClock, remainingMs, isTimed, type TimeControl } from '../services/clockService';
+import { useMultiplayerStore } from '../state/multiplayerStore';
 
 export function PlayScreen() {
   const { variantId } = useParams();
@@ -19,7 +20,7 @@ export function PlayScreen() {
   const { matchInProgress, gameOverInfo, vsComputer, variant, variantState, orientation, activeVariantEvents, engineErrorMessage, game, startClassic, startVariant, resignGame, offerDraw, canUndo, undoLastMove, drawOfferRejectedAt } = useGameStore();
   const engineStatus = useEngineStore((s) => s.status);
   const [pendingColor, setPendingColor] = useState<'w' | 'b'>('w');
-  const [pendingOpponent, setPendingOpponent] = useState<'computer' | 'local'>('computer');
+  const [pendingOpponent, setPendingOpponent] = useState<'computer' | 'local' | 'online'>('computer');
   const [pendingLevel, setPendingLevel] = useState<number>(8);
   const [pendingTimeControl, setPendingTimeControl] = useState<string>('unlimited');
   const [hintUci, setHintUci] = useState<{ from: string; to: string } | null>(null);
@@ -116,8 +117,11 @@ export function PlayScreen() {
               <div className="setup-panel__choices">
                 <Button variant={pendingOpponent === 'computer' ? 'primary' : 'secondary'} onClick={() => setPendingOpponent('computer')}>Bilgisayar</Button>
                 <Button variant={pendingOpponent === 'local' ? 'primary' : 'secondary'} onClick={() => setPendingOpponent('local')}>Yerel İki Oyuncu</Button>
+                <Button variant={pendingOpponent === 'online' ? 'primary' : 'secondary'} onClick={() => setPendingOpponent('online')}>Çevrimiçi (Beta)</Button>
               </div>
             </div>
+
+            {pendingOpponent === 'online' && <MultiplayerSetup />}
 
             <div className="setup-panel__group">
               <h3>Süre</h3>
@@ -155,10 +159,14 @@ export function PlayScreen() {
           </>
         )}
 
-        <Button onClick={() => {
-          if (variantId) startVariant(variantId, pendingColor);
-          else startClassic(pendingColor, pendingOpponent === 'computer', pendingTimeControl);
-        }}>
+        <Button
+          onClick={() => {
+            if (variantId) startVariant(variantId, pendingColor);
+            else startClassic(pendingColor, pendingOpponent === 'computer', pendingTimeControl);
+          }}
+          disabled={pendingOpponent === 'online'}
+          title={pendingOpponent === 'online' ? 'Önce oda kur veya odaya katıl' : undefined}
+        >
           Oyunu Başlat
         </Button>
       </div>
@@ -287,6 +295,44 @@ export function PlayScreen() {
         onRematch={() => (variantId ? startVariant(variantId, orientation) : startClassic(orientation, vsComputer))}
         onHome={() => navigate('/')}
       />}
+    </div>
+  );
+}
+
+/**
+ * Çevrimiçi (Beta) kurulum: oda kur (kod üret) veya odaya katıl (kod gir).
+ * Bağlantı multiplayerStore üzerinden; hamle senkronu MultiplayerGame efekti.
+ */
+function MultiplayerSetup() {
+  const mp = useMultiplayerStore();
+  const [code, setCode] = useState('');
+  return (
+    <div className="mp-setup">
+      {!mp.roomId && (
+        <div className="setup-panel__choices setup-panel__choices--wrap">
+          <Button onClick={() => mp.createRoom('Oyuncu')}>Oda Kur</Button>
+          <div className="mp-setup__join">
+            <input
+              className="mp-setup__code-input"
+              placeholder="4NH5G"
+              maxLength={5}
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              aria-label="Oda kodu"
+            />
+            <Button onClick={() => mp.joinRoom(code, 'Oyuncu')}>Katıl</Button>
+          </div>
+        </div>
+      )}
+      {mp.roomId && (
+        <div className="mp-status" role="status">
+          {mp.role === 'host' && <><strong>Oda kodu: {mp.roomId}</strong><span> — rakibin bu kodu girmesini bekle…</span></>}
+          {mp.role === 'guest' && <><strong>{mp.roomId}</strong> odasına katılındı — host bekleniyor…</>}
+          {mp.connected && <em className="mp-status__ok"> ✓ {mp.peerName} bağlandı!</em>}
+          <Button variant="ghost" onClick={() => mp.leave()}>İptal</Button>
+        </div>
+      )}
+      {mp.lastError && <p className="mp-setup__error" role="alert">{mp.lastError}</p>}
     </div>
   );
 }

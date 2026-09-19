@@ -1,6 +1,7 @@
 import { StockfishEngine } from '../engine/StockfishEngine';
 import { buildReplay, finalFen } from '../chess/replay';
 import { toWhitePerspective, winPercentWhite, accuracyFromLoss, classifyMove, isBrilliantMove, applyMissPass, type MoveClass, type EngineSample } from '../engine/evaluation';
+import { powerMean } from './accuracyService';
 import { staticExchangeEval } from '../engine/see';
 import { Chess, type Square } from 'chess.js';
 import { identifyOpening } from './openingService';
@@ -170,6 +171,8 @@ return {
 applyMissPass(moves);
 
 const avg = (arr: MoveReview[]) => (arr.length ? arr.reduce((s, m) => s + m.accuracy, 0) / arr.length : 0);
+/** CAPS ADIM 4: hamle doğrulukları power mean (p=-0.5) ile birleştirilir — aritmetik ortalama tek hatayı şişirir. */
+const powerMeanAcc = (arr: MoveReview[]) => powerMean(arr.map((m) => m.accuracy), -0.5);
 const opening = identifyOpening(steps.map((s) => s.moveSan));
 
 /** Chess.com tarzı sınıf sayımı (her taraf için). */
@@ -182,8 +185,8 @@ function classCounts(moves: MoveReview[]): Record<string, number> {
 return {
 moves,
 evalHistoryWhiteCp: samples.map((s) => (s.mateWhite !== null ? mateToCp(s.mateWhite) : s.cpWhite)),
-whiteAccuracy: avg(moves.filter((m) => m.side === 'w')),
-blackAccuracy: avg(moves.filter((m) => m.side === 'b')),
+whiteAccuracy: powerMeanAcc(moves.filter((m) => m.side === 'w')),
+blackAccuracy: powerMeanAcc(moves.filter((m) => m.side === 'b')),
 openingName: opening.name,
 openingEco: opening.eco,
 whiteClassCounts: classCounts(moves.filter((m) => m.side === 'w')),

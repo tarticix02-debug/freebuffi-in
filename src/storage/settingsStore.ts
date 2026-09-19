@@ -4,7 +4,7 @@ export type BoardTheme = 'classic' | 'green' | 'blue' | 'walnut' | 'ice';
 
 export interface BoardThemeColors { light: string; dark: string; }
 export const BOARD_THEMES: Record<BoardTheme, BoardThemeColors> = {
-  classic: { light: '#eef1f6', dark: '#7a8ba3' },
+  classic: { light: '#edd9b7', dark: '#b58863' },
   green: { light: '#eeeed2', dark: '#769656' },
   blue: { light: '#dee3e6', dark: '#4b7399' },
   walnut: { light: '#d2b48c', dark: '#7c5430' },
