@@ -34,6 +34,7 @@ interface GameState {
   activeVariantEvents: VariantEvent[];
   vsComputer: boolean;
   gameOverInfo: { over: boolean; result?: string; winner?: 'w' | 'b' | null; endReason?: 'checkmate' | 'stalemate' | 'draw' | 'resign' | 'timeout' } | null;
+  isOnlineMatch: boolean;
   /** Son kaydedilen oyunun id'si — oyun sonu ekranındaki 'İncele' bağlantısı için. */
   lastSavedGameId: string | null;
   matchInProgress: boolean;
@@ -49,12 +50,20 @@ interface GameState {
   clockSnapshots: ClockState[];
 
   startClassic: (humanColor: 'w' | 'b', vsComputer: boolean, timeControlId?: string) => void;
+  /** Çevrimiçi (Beta): local iki oyuncu gibi ama yalnız kendi sırasında oynanabilir + hamleler yayınlanır. */
+  startOnline: (myColor: 'w' | 'b', timeControlId?: string) => void;
+  /** Hamle lokalde uygulandıktan sonra çağrılır (multiplayerStore kanca bağlar). */
+  setMoveListener: (listener: ((from: string, to: string, promotion?: string) => void) | null) => void;
+  /** Uzak hamle: doğrulama sonrası playMove ile uygulanır (sıra/validite orada denetlenir). */
+  applyRemoteMove: (from: string, to: string, promotion?: string) => Promise<void>;
   startVariant: (variantId: string, humanColor: 'w' | 'b') => void;
   legalMovesForSquare: (square: Square) => Move[];
-  playMove: (from: Square, to: Square, promotion?: string) => Promise<void>;
+  playMove: (from: Square, to: Square, promotion?: string, remote?: boolean) => Promise<void>;
   performVariantAction: (type: string, payload: any) => { success: boolean; reason?: string };
   requestComputerMoveIfNeeded: () => Promise<void>;
   resignGame: () => Promise<void>;
+  /** Online: rakip çıktı/teslim — kalan taraf kazanır (endGame sahibi üzerinden). */
+  endOnlineGameAsWinner: (resultText: string) => Promise<void>;
   offerDraw: () => Promise<void>;
   /** Süreli oyunda saniyede bir çağrılır: bayrak kontrolü + canlı tick. */
   tickClock: () => Promise<void>;
@@ -68,6 +77,8 @@ interface GameState {
 // bozmamalıdır. Her eşleşme bir token alır; asenkron işler tamamlanınca
 // token hâlâ güncel mi diye bakılır, değilse sonuç çöpe gider.
 let matchTokenCounter = 0;
+/** Online maçta hamle yayın kanca'sı (multiplayerStore bağlar; null = offline). */
+let moveListener: ((from: string, to: string, promotion?: string) => void) | null = null;
 const tokenOf = new WeakMap<object, MatchToken>();
 function tokenFor(state: object): MatchToken | undefined {
   return tokenOf.get(state);
@@ -98,12 +109,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   variantState: null,
   activeVariantEvents: [],
   vsComputer: false,
+  /** Çevrimiçi (Beta) maç bayrağı: sıra kilidi + unrated kayıt için. */
+  isOnlineMatch: false,
   gameOverInfo: null,
   lastSavedGameId: null,
   matchInProgress: false,
   matchStartedAt: null,
   visibilityMask: null,
   engineErrorMessage: null,
+
+  setMoveListener: (listener) => { moveListener = listener; },
+
+  /** Uzak hamle: legalite + sıra playMove içinde denetlenir; sessizce yoksayılır. */
+  applyRemoteMove: async (from, to, promotion) => {
+    const s = get();
+    if (!s.isOnlineMatch || !s.matchInProgress) return; // online olmayan maçta uzak hamle kabul edilmez
+    await get().playMove(from as Square, to as Square, promotion, true);
+  },
 
   startClassic: (humanColor, vsComputer, timeControlId) => {
     const game = new ChessGame();
@@ -113,7 +135,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       game, orientation: humanColor, variant: null, variantState: null, vsComputer,
       lastMove: null, gameOverInfo: null, lastSavedGameId: null, visibilityMask: null,
       matchInProgress: true, matchStartedAt: Date.now(),
-      activeVariantEvents: [], engineErrorMessage: null,
+      activeVariantEvents: [], engineErrorMessage: null, isOnlineMatch: false,
       clockControl: control,
       clock: timed ? initialClock(control, 'w') : null,
       clockSnapshots: [],
@@ -123,6 +145,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     playSound('gameStart');
     if (vsComputer) useEngineStore.getState().init();
     get().requestComputerMoveIfNeeded();
+  },
+
+  /** Çevrimiçi (Beta): standard başlangıç pozisyonu, local-iki-oyuncu kuralları + sıra kilidi. */
+  startOnline: (myColor, timeControlId) => {
+    const game = new ChessGame();
+    const control = TIME_CONTROLS.find((t) => t.id === timeControlId)?.control ?? TIME_CONTROLS[0].control;
+    const timed = control.initialSeconds > 0;
+    set({
+      game, orientation: myColor, variant: null, variantState: null, vsComputer: false,
+      lastMove: null, gameOverInfo: null, lastSavedGameId: null, visibilityMask: null,
+      matchInProgress: true, matchStartedAt: Date.now(),
+      activeVariantEvents: [], engineErrorMessage: null, isOnlineMatch: true,
+      clockControl: control,
+      clock: timed ? initialClock(control, 'w') : null,
+      clockSnapshots: [],
+      drawOfferRejectedAt: null,
+    });
+    tokenOf.set(game, ++matchTokenCounter);
+    playSound('gameStart');
   },
 
   startVariant: (variantId, humanColor) => {
@@ -153,7 +194,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     return moves.filter((m) => variant.onBeforeMove!(variantState, game, m.from as Square, m.to as Square).allowed);
   },
 
-  playMove: async (from, to, promotion) => {
+  playMove: async (from, to, promotion, remote = false) => {
     const { game, variant, variantState } = get();
     const myToken = tokenFor(game);
     if (variant?.onBeforeMove && variantState) {
@@ -162,6 +203,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     const mv = game.move({ from, to, promotion });
     if (!mv) return;
+
+    // Online maç sıra kilidi: herkes yalnızca KENDİ rengiyle oynar. applyRemoteMove
+    // uzak hamleyi işaretler (remote=true): uzak tarafın reni orientation'ın tersi olmalı;
+    // kendi rengine gelen uzak hamle (echo/yaşlı mesaj) geri alınır ve yoksayılır.
+    if (get().isOnlineMatch && remote && mv.color === get().orientation) { game.raw.undo(); return; }
 
     // Saat: hamleyi oynayanın süresinden geçen süre düşer, increment eklenir,
     // sıra rakibe geçer. Hamle öncesi anlık görüntü saklanır (undo iadesi).
@@ -209,6 +255,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     else if (mv.captured) { playSound('capture'); triggerHaptic('medium'); }
     else if (snap.isCheck) { playSound('check'); triggerHaptic('medium'); }
     else { playSound('move'); triggerHaptic('light'); }
+
+    // Online maçta lokal (kendi sırasında oynanan) hamleyi peer'a yayınla.
+    // Uzak hamlede moveListener tekrar yayın yapmaz: applyRemoteMove, kendi
+    // kancasını geçici olarak kapatar bu satıra tek-ulaş sağlar.
+    if (get().isOnlineMatch && moveListener && mv.color === get().orientation) {
+      moveListener(from, to, promotion);
+    }
 
     if (moveEndsGame(snap)) {
       // lichess benzeri bitiş sesi: mat zaten 'checkmate' tonu çaldı; diğer
@@ -318,6 +371,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       resultText: 'Teslim oldunuz',
       winner: orientation === 'w' ? 'b' : 'w',
       forcedResult: 'loss', // teslim, mat ile biten kayıpla aynı puanlanır
+    });
+  },
+
+  endOnlineGameAsWinner: async (resultText) => {
+    const { matchInProgress, orientation } = get();
+    if (!matchInProgress) return;
+    await endGame({
+      endReason: 'resign',
+      resultText,
+      winner: orientation,
+      forcedResult: 'win',
     });
   },
 
@@ -466,7 +530,9 @@ if (typeof window !== 'undefined') {
   const result: 'win' | 'loss' | 'draw' = forcedResult ?? (snap.isDraw || snap.isStalemate ? 'draw'
     : snap.isCheckmate ? (snap.turn !== state.orientation ? 'win' : 'loss') : 'draw');
 
-  const mode = state.variant?.id ?? (state.vsComputer ? 'vs-computer' : 'classic');
+  const mode = state.isOnlineMatch ? 'online' : state.variant?.id ?? (state.vsComputer ? 'vs-computer' : 'classic');
+  // Rating kararı (tutarlı, iki tarafta da): online maçlar Beta'da UNRATED —
+  // rakip Elo'su bilinmediğinden adil bir Elo değişimi hesaplanamaz.
   const isRated = mode === 'classic' || mode === 'vs-computer';
 
   let ratingBefore = 0, ratingAfter = 0;
@@ -482,7 +548,7 @@ if (typeof window !== 'undefined') {
 
   const saved = await saveGame({
     date: Date.now(), mode,
-    opponent: state.vsComputer ? `Stockfish (Lv. ${useEngineStore.getState().level})` : 'Yerel Oyuncu',
+    opponent: state.isOnlineMatch ? 'Çevrimiçi Rakip' : state.vsComputer ? `Stockfish (Lv. ${useEngineStore.getState().level})` : 'Yerel Oyuncu',
     userColor: state.orientation, result, pgn: snap.pgn, finalFen: snap.fen,
     moveCount: state.game.raw.history().length, durationSeconds, ratingBefore, ratingAfter,
     timeControlId: state.clock ? TIME_CONTROLS.find((t) => t.control === state.clockControl)?.id ?? 'timed' : 'unlimited',

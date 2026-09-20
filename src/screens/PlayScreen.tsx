@@ -50,6 +50,8 @@ export function PlayScreen() {
   useEffect(() => { setHintUci(null); }, [historyLen]);
 
   const rule = variantId ? VARIANT_REGISTRY[variantId] : null;
+  const isOnline = useGameStore((s) => s.isOnlineMatch);
+  const mpLeave = (reason: 'leave' | 'resign') => useMultiplayerStore.getState().leave(reason);
 
   // İpucu: motorun en iyi hamlesini al, tahtada vurgula. Rate-limit: 10sn'de bir;
   // motor hâlâ yükleniyorsa zarifçe vazgeç (çift-init düzeltmesi sonrası
@@ -205,16 +207,21 @@ export function PlayScreen() {
           })()}
 
           <div className="play-screen__actions">
-            <Button variant="secondary" disabled={!undoAvailable} onClick={() => { setConfirmResign(false); undoLastMove(); }}>
+            <Button variant="secondary" disabled={!undoAvailable || isOnline} onClick={() => { setConfirmResign(false); undoLastMove(); }}>
               ↩ Geri Al
             </Button>
             {confirmResign ? (
               <>
-                <Button variant="danger" onClick={() => { setConfirmResign(false); resignGame(); }}>Evet, teslim ol</Button>
+                <Button variant="danger" onClick={() => { setConfirmResign(false); resignGame(); if (isOnline) mpLeave('resign'); }}>Evet, teslim ol</Button>
                 <Button variant="secondary" onClick={() => setConfirmResign(false)}>Vazgeç</Button>
               </>
             ) : (
               <Button variant="secondary" onClick={() => setConfirmResign(true)}>🏳 Teslim Ol</Button>
+            )}
+            {isOnline && (
+              <Button variant="secondary" onClick={() => { mpLeave('leave'); if (gameOverInfo?.over) navigate('/'); else { useGameStore.setState({ matchInProgress: false, gameOverInfo: null }); navigate('/'); } }}>
+                Odadan Ayrıl
+              </Button>
             )}
             {drawOfferPending ? (
               <>
