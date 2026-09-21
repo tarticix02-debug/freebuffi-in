@@ -49,8 +49,21 @@ get().engine.setLevel(lvl);
 
 requestBestMove: async (fen: string) => {
 const { engine, level } = get();
-if (engine.getStatus() === 'ERROR' || engine.getStatus() === 'LOADING') {
+const status = engine.getStatus();
+if (status === 'ERROR' || status === 'LOADING') {
 throw new Error('Motor hazır değil. Analiz/oyun başlatılamaz.');
+}
+// Motor meşgulken (THINKING) analyze()'ın 'stop' göndermesi lite-single wasm'da
+// 'unreachable' crash'ine yol açıyor (arama ortasında iptal). Bunun yerine
+// sürmekte olan arama bitene kadar bekleyip sıraya gir — en fazla ~3sn.
+if (status === 'THINKING') {
+const start = Date.now();
+while (engine.getStatus() === 'THINKING' && Date.now() - start < 3000) {
+await new Promise((r) => setTimeout(r, 50));
+}
+if (engine.getStatus() !== 'READY') {
+throw new Error('Motor hazır değil. Analiz/oyun başlatılamaz.');
+}
 }
 const requestId = uid();
 const movetimeMs = levelToMoveTimeMs(level);

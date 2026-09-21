@@ -13,6 +13,7 @@ import { analyzeGame, type GameReviewResult } from '../services/gameReviewServic
 import { pickKeyChips } from '../services/reviewKeyChips';
 import { TIME_CONTROLS, formatClock, remainingMs, isTimed, type TimeControl } from '../services/clockService';
 import { useMultiplayerStore } from '../state/multiplayerStore';
+import { GameEvalBar } from '../components/board/GameEvalBar';
 
 export function PlayScreen() {
   const { variantId } = useParams();
@@ -29,6 +30,54 @@ export function PlayScreen() {
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [confirmResign, setConfirmResign] = useState(false);
   const [drawOfferPending, setDrawOfferPending] = useState(false);
+  // Zen (Odak) modu: yalnız tahta + isimler + saatler kalır. 'Z' tuşu veya buton.
+  const [zen, setZen] = useState(false);
+  useEffect(() => {
+    function onZen() { setZen((v) => !v); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'z' && e.key !== 'Z') return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      setZen((v) => !v);
+    }
+    document.addEventListener('uc-toggle-zen', onZen);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('uc-toggle-zen', onZen);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  // Canlı eval bar: yalnız sıra bizdeyken ve motor READY iken örneklenir.
+  // Bağımlılık FEN string'i (game örneği mutate edildiği için kimliği değişmez);
+  // skip edilen pozisyon ref'i tüketmez — motor hazır olunca tekrar denenir.
+  const evalFen = game.fen();
+  const evalMyTurn = game.raw.turn() === orientation;
+  const [evalSample, setEvalSample] = useState<{ cp: number | null; mate: number | null } | null>(null);
+  const evalFenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!evalMyTurn || engineStatus !== 'READY') { evalFenRef.current = null; return; }
+    if (evalFenRef.current === evalFen) return;
+    evalFenRef.current = evalFen;
+    let cancelled = false;
+    (async () => {
+      try {
+        const es = useEngineStore.getState();
+        if (es.status !== 'READY') return;
+        const r = await es.requestBestMove(evalFen);
+        if (!cancelled) {
+          // Motor skoru SIRA-SINDA-OLANın perspektifinden verir; bar beyaz
+          // perspektifi ister. Örnekleme yalnız bizim sıramızda olduğu için
+          // işaret bizim rengimize göre çevrilir.
+          const sign = orientation === 'w' ? 1 : -1;
+          setEvalSample({
+            cp: r.evaluationCp === null ? null : r.evaluationCp * sign,
+            mate: r.mate === null ? null : r.mate * sign,
+          });
+        }
+      } catch { /* bar değerini koru */ }
+    })();
+    return () => { cancelled = true; };
+  }, [evalFen, engineStatus, evalMyTurn]);
 
   // Hamle listesi: her render'da history'den türetilir; otomatik kaydırma için ref.
   // NOT: Hook'lar erken return'den ÖNCE çağrılmalı (Rules of Hooks).
@@ -183,7 +232,7 @@ export function PlayScreen() {
   }
 
   return (
-    <div className="play-screen">
+    <div className={`play-screen${zen ? ' play-screen--zen' : ''}`}>
       {!matchOver && (
         <>
           <div className="play-screen__status">
@@ -244,6 +293,11 @@ export function PlayScreen() {
                 onClick={() => { void requestHint(); }}
               >{hintLoading ? '💡 …' : '💡 İpucu'}</Button>
             )}
+            <Button
+              variant="secondary"
+              title="Odaklanma modu (Z tuşu) — yalnız tahta, isimler ve saat kalır"
+              onClick={() => setZen(true)}
+            >🎯 Odaklan</Button>
           </div>
 
           {hintUci && (
@@ -271,9 +325,19 @@ export function PlayScreen() {
 
       {engineStatus === 'LOADING' && vsComputer && !engineErrorMessage && game.raw.turn() !== orientation && (
         <p className="engine-loading-note">Motor ilk kez yükleniyor, birkaç saniye sürebilir…</p>
-      )}
+      )}          {zen && (
+            <Button
+              variant="ghost"
+              className="zen-exit"
+              title="Odak modundan çık (Z tuşu)"
+              onClick={() => setZen(false)}
+            >✕</Button>
+          )}
 
-      <Board hintSquares={hintUci ? [hintUci.from, hintUci.to] : undefined} />
+          <div className="board-with-eval">
+            <GameEvalBar cpWhite={evalSample?.cp ?? null} mateWhite={evalSample?.mate ?? null} flipped={orientation === 'b'} />
+            <Board hintSquares={hintUci ? [hintUci.from, hintUci.to] : undefined} />
+          </div>
 
       {movePairs.length > 0 && (
         <div className="move-list-panel" ref={moveListRef} aria-label="Hamle listesi">

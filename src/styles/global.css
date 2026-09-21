@@ -175,3 +175,26 @@ h2 { font-size: 17px; font-weight: 700; }
 .btn:not(:disabled):hover { filter: brightness(1.08); }
 .btn:not(:disabled):active { transform: scale(0.98); }
 .setup-panel__choices .btn { min-width: 96px; }
+
+/* ===== Tahta etkileşimleri: oklar, vurgular, premove, drag, zen, eval bar ===== */
+.board-with-eval{display:flex;gap:10px;align-items:center;justify-content:center}
+.game-eval-bar{position:relative;width:18px;height:min(92vw,640px);background:#3d3b39;border-radius:6px;overflow:hidden;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.game-eval-bar__white{position:absolute;bottom:0;left:0;right:0;background:var(--board-light,var(--text-primary));transition:height .5s ease-in-out}
+.game-eval-bar__white--top{bottom:auto;top:0}
+.game-eval-bar__label{position:absolute;left:0;right:0;text-align:center;font-size:9px;font-weight:700;pointer-events:none}
+.game-eval-bar__label--black{top:4px;color:#eee}
+.game-eval-bar__label--white{bottom:4px;color:#222}
+.square--annot-green{box-shadow:inset 0 0 0 4px rgba(21,190,110,.85)}
+.square--annot-red{box-shadow:inset 0 0 0 4px rgba(236,80,72,.85)}
+.square--annot-blue{box-shadow:inset 0 0 0 4px rgba(56,130,246,.85)}
+.square--annot-yellow{box-shadow:inset 0 0 0 4px rgba(236,197,59,.85)}
+.board-arrows{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+.board-wrapper{position:relative}
+.square--premove-from{outline:3px solid rgba(255,150,40,.9);outline-offset:-3px}
+.square--premove-to{background:rgba(255,150,40,.42)!important}
+.square--drag-source{opacity:.5}
+.square--drag-target{box-shadow:inset 0 0 0 4px rgba(255,255,255,.55),inset 0 0 12px rgba(0,0,0,.35)}
+@keyframes square-bounce{0%{transform:translate(0,0)}35%{transform:translate(0,-9px)}70%{transform:translate(0,2px)}100%{transform:translate(0,0)}}
+.play-screen--zen .play-screen__actions,.play-screen--zen .move-list-panel,.play-screen--zen .play-screen__status,.play-screen--zen .clock-row .clock-row__vs,.play-screen--zen .variant-events,.play-screen--zen .hint-banner,.play-screen--zen .draw-banner{display:none}
+.play-screen--zen{background:var(--bg-base)}
+.zen-exit{position:fixed;top:12px;right:12px;z-index:30;padding:6px 12px}
