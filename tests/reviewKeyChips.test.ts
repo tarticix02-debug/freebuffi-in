@@ -6,7 +6,7 @@ import type { GameReviewResult, MoveReview } from '../src/services/gameReviewSer
 function move(side: 'w' | 'b', classification: MoveReview['classification']): MoveReview {
   return {
     ply: 0, side, san: '??', fenBefore: '', fenAfter: '', playedUci: '',
-    bestUci: null, evalAfterWhiteCp: null, evalAfterMate: null,
+    bestUci: null, evalBeforeWhiteCp: 0, evalAfterWhiteCp: null, evalAfterMate: null,
     winPercentLoss: 0, accuracy: 100, moverWinPercentBefore: 50, moverWinPercentAfter: 50,
     classification, isBookMove: false,
   };

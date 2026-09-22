@@ -315,11 +315,18 @@ function AccuracyCards({ result }: { result: NonNullable<ReturnType<typeof useGa
 
 function MoveDetailCard({ move }: { move: NonNullable<ReturnType<typeof useGameReviewStore.getState>['result']>['moves'][number] }) {
   const kind = move.classification as MoveClassKey;
+  // Örnek bloktaki Beyaz-perspektifli kazanma şansı (win%): mover değerinden çevrilir.
+  const whiteWinBefore = move.side === 'w' ? move.moverWinPercentBefore : 100 - move.moverWinPercentBefore;
+  const whiteWinAfter = move.side === 'w' ? move.moverWinPercentAfter : 100 - move.moverWinPercentAfter;
+  const centipawnLoss = move.evalBeforeWhiteCp !== null && move.evalAfterWhiteCp !== null
+    ? Math.round(move.side === 'w' ? move.evalBeforeWhiteCp - move.evalAfterWhiteCp : move.evalAfterWhiteCp - move.evalBeforeWhiteCp)
+    : null;
+  const fmtEval = (cp: number | null) => cp === null ? '?' : `${cp > 0 ? '+' : ''}${(cp / 100).toFixed(2)}`;
   return (
     <div className={`review-screen__move-detail review-screen__move-detail--${move.classification}`}>
       <div className="move-detail__title">
         <MoveClassIcon kind={kind} size={28} />
-        <strong>{move.san}</strong>
+        <strong>{move.moveNumber ?? Math.floor(move.ply / 2) + 1}{move.side === 'w' ? '.' : '...'} {move.san}</strong>
         <span className="move-detail__label" style={{ color: CLASS_COLORS[kind] }}>{CLASS_LABELS[kind]}</span>
       </div>
       <p>
@@ -328,7 +335,12 @@ function MoveDetailCard({ move }: { move: NonNullable<ReturnType<typeof useGameR
           <> — <strong>En iyisi:</strong> {move.bestUci}</>
         )}
       </p>
-      <p>Doğruluk katkısı: {move.accuracy.toFixed(1)}% • Win kaybı: {move.winPercentLoss.toFixed(1)}%</p>
+      <div className="move-detail__metrics">
+        <span title="Hamle öncesi → sonrası motor değerlendirmesi (Beyaz perspektifi)">Değerlendirme: {fmtEval(move.evalBeforeWhiteCp)} → {fmtEval(move.evalAfterWhiteCp)}</span>
+        <span title="Beyazın kazanma olasılığı (sigmoid dönüşümü)">Kazanma şansı: {whiteWinBefore.toFixed(1)}% → {whiteWinAfter.toFixed(1)}%</span>
+        <span title="Sentipawn kaybı">Cp kaybı: {centipawnLoss ?? '—'}</span>
+        <span title="Bu hamledeki doğruluk">Hamle doğruluğu: {move.accuracy.toFixed(1)}%</span>
+      </div>
       {move.comment && <p className="move-detail__comment">{move.comment}</p>}
     </div>
   );

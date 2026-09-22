@@ -93,7 +93,7 @@ describe('Bileşen 5 — JSON çıktı şeması', () => {
       fenBefore: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       fenAfter: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
       playedUci: 'e2e4', bestUci: 'e2e4',
-      evalAfterWhiteCp: 30, evalAfterMate: null,
+      evalBeforeWhiteCp: 0, evalAfterWhiteCp: 30, evalAfterMate: null,
       winPercentLoss: 0, accuracy: 99.5,
       moverWinPercentBefore: 50, moverWinPercentAfter: 51,
       classification: 'best', isBookMove: false, moveNumber: 1,
@@ -122,11 +122,17 @@ describe('Bileşen 5 — JSON çıktı şeması', () => {
     expect(j.summary.stats.white.missed_win).toBe(0);
     expect(j.summary.stats.black.missed_win).toBe(1);
     expect(j.move_history).toHaveLength(3);
-    expect(j.move_history[0]).toEqual({
+    expect(j.move_history[0]).toMatchObject({
       move_number: 1, player: 'white', san: 'e4',
       classification: 'book', accuracy_score: 100,
       comment: 'Kitap hamlesi. Açılış teorisine uygun standart bir başlangıç.',
     });
+    // Hamle-bazlı teknik blok (örnek şema): fen + değerlendirme + kazanma şansı + kayıp.
+    expect(j.move_history[0].fen_before).toContain('rnbqkbnr');
+    expect(j.move_history[0].eval_before).toBe(0);
+    expect(j.move_history[0].win_percent_before).toBeCloseTo(50, 1);
+    expect(j.move_history[0].centipawn_loss).toBe(-30); // fixture: eval 0 → +30 (beyaz 30cp kaybeder)
+    expect(j.move_history[0].move_accuracy).toBe(100);
   });
   it('dahili miss → JSON missed_win; player siyah → black', () => {
     const j = buildReviewJson(result);

@@ -198,3 +198,8 @@ h2 { font-size: 17px; font-weight: 700; }
 .play-screen--zen .play-screen__actions,.play-screen--zen .move-list-panel,.play-screen--zen .play-screen__status,.play-screen--zen .clock-row .clock-row__vs,.play-screen--zen .variant-events,.play-screen--zen .hint-banner,.play-screen--zen .draw-banner{display:none}
 .play-screen--zen{background:var(--bg-base)}
 .zen-exit{position:fixed;top:12px;right:12px;z-index:30;padding:6px 12px}
+
+/* Hamle detayı metrik bloğu (eval/win%/cp kaybı/hamle doğruluğu) ve koç yorumu */
+.move-detail__metrics{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin:8px 0;font-size:13px;color:var(--text-secondary)}
+.move-detail__metrics span[title]{cursor:help}
+.move-detail__comment{margin:8px 0 0;padding:8px 12px;background:var(--bg-card);border-left:3px solid var(--accent);border-radius:6px;font-size:13px;font-style:italic;color:var(--text-primary)}

@@ -66,11 +66,11 @@ describe('Otomatik puzzle üretimi (kendi oyunlarından)', () => {
     const fakeReview: GameReviewResult = {  
       moves: [  
         {          ply: 0, side: 'w', san: 'Bad', fenBefore: 'fen0', fenAfter: 'fen1', 
-          playedUci: 'e2e4', bestUci: 'd2d4', evalAfterWhiteCp: -400, 
+          playedUci: 'e2e4', bestUci: 'd2d4', evalBeforeWhiteCp: 0, evalAfterWhiteCp: -400, 
           evalAfterMate: null, winPercentLoss: 35, accuracy: 10, moverWinPercentBefore: 80, moverWinPercentAfter: 15, classification: 'blunder', isBookMove: false,   
         },  
         {          ply: 1, side: 'b', san: 'Punish', fenBefore: 'fen1', fenAfter: 'fen2', 
-          playedUci: 'g8f6', bestUci: 'd8h4', evalAfterWhiteCp: -390, 
+          playedUci: 'g8f6', bestUci: 'd8h4', evalBeforeWhiteCp: 0, evalAfterWhiteCp: -390, 
           evalAfterMate: null, winPercentLoss: 1, accuracy: 95, moverWinPercentBefore: 95, moverWinPercentAfter: 96, classification: 'good', isBookMove: false,   
         },  
       ],  
@@ -87,8 +87,8 @@ describe('Otomatik puzzle üretimi (kendi oyunlarından)', () => {
   
   it('rakip zaten en iyisini oynadıysa puzzle üretmez', () => {  
     const fakeReview: GameReviewResult = {  
-      moves: [        { ply: 0, side: 'w', san: 'Bad', fenBefore: 'f0', fenAfter: 'f1', playedUci: 'e2e4', bestUci: 'd2d4', evalAfterWhiteCp: -300, evalAfterMate: null, winPercentLoss: 30, accuracy: 20, moverWinPercentBefore: 82, moverWinPercentAfter: 20, classification: 'blunder', isBookMove: false }, 
-        { ply: 1, side: 'b', san: 'Best', fenBefore: 'f1', fenAfter: 'f2', playedUci: 'd8h4', bestUci: 'd8h4', evalAfterWhiteCp: -290, evalAfterMate: null, winPercentLoss: 1, accuracy: 98, moverWinPercentBefore: 95, moverWinPercentAfter: 96, classification: 'best', isBookMove: false },   
+      moves: [        { ply: 0, side: 'w', san: 'Bad', fenBefore: 'f0', fenAfter: 'f1', playedUci: 'e2e4', bestUci: 'd2d4', evalBeforeWhiteCp: 0, evalAfterWhiteCp: -300, evalAfterMate: null, winPercentLoss: 30, accuracy: 20, moverWinPercentBefore: 82, moverWinPercentAfter: 20, classification: 'blunder', isBookMove: false }, 
+        { ply: 1, side: 'b', san: 'Best', fenBefore: 'f1', fenAfter: 'f2', playedUci: 'd8h4', bestUci: 'd8h4', evalBeforeWhiteCp: 0, evalAfterWhiteCp: -290, evalAfterMate: null, winPercentLoss: 1, accuracy: 98, moverWinPercentBefore: 95, moverWinPercentAfter: 96, classification: 'best', isBookMove: false },   
       ],  
       evalHistoryWhiteCp: [0, -300, -290], whiteAccuracy: 20, blackAccuracy: 98, openingName: null, openingEco: null,
       whiteClassCounts: { blunder: 1 }, blackClassCounts: { best: 1 },

@@ -14,7 +14,7 @@ function fakeMove(over: Partial<MoveReview> = {}): MoveReview {
     bestUci: 'e2e4',
     moverWinPercentBefore: 55,
     moverWinPercentAfter: 60,
-    evalAfterWhiteCp: 30,
+    evalBeforeWhiteCp: 0, evalAfterWhiteCp: 30,
     evalAfterMate: null,
     winPercentLoss: 0,
     accuracy: 99,

@@ -1,7 +1,7 @@
 import { StockfishEngine } from '../engine/StockfishEngine';
 import { buildReplay, finalFen } from '../chess/replay';
 import { toWhitePerspective, winPercentWhite, accuracyFromLoss, classifyMove, isBrilliantMove, applyMissPass, type MoveClass, type EngineSample } from '../engine/evaluation';
-import { powerMean } from './accuracyService';
+import { volatilityWeights, weightedQuadraticMean } from './accuracyService';
 import { staticExchangeEval } from '../engine/see';
 import { Chess, type Square } from 'chess.js';
 import { identifyOpening } from './openingService';
@@ -107,6 +107,8 @@ export interface MoveReview {
   bestUci: string | null;
   evalAfterWhiteCp: number | null;
   evalAfterMate: number | null;
+  /** Hamleden ÖNCEKİ motor değerlendirmesi (Beyaz perspektifi, cp; mat ise mateToCp ölçekli). */
+  evalBeforeWhiteCp: number | null;
   winPercentLoss: number;
   accuracy: number;
   /** Hamleyi oynayan tarafın hamle öncesi/sonrası kazanma olasılığı (win%) — miss pası ve UI detayı için. */
@@ -284,6 +286,7 @@ export async function analyzeGame(pgn: string, options: ReviewOptions = {}): Pro
       ply: i, side: step.side, san: step.moveSan,
       fenBefore: step.fenBefore, fenAfter: fens[i + 1],
       playedUci: step.moveUci, bestUci: before.bestUci,
+      evalBeforeWhiteCp: before.mateWhite !== null ? mateToCp(before.mateWhite) : before.cpWhite,
       evalAfterWhiteCp, evalAfterMate: after.mateWhite,
       winPercentLoss: loss, accuracy,
       moverWinPercentBefore: moverWinBefore, moverWinPercentAfter: moverWinAfter,
@@ -308,13 +311,19 @@ export async function analyzeGame(pgn: string, options: ReviewOptions = {}): Pro
   }
 
   /**
-   * CAPS ADIM 4: genel doğruluk — hamle skorlarının KUVVET ortalaması (p=2,
-   * kuadratik; aritmetik değil) VE kitap hamleleri dahil edilir (kitap = 100,
-   * ağırlık 1; oyun ortası/sonu ağırlığı 1 — dengelenmiş ağırlıklı ortalama).
+   * CAPS ADIM 4: genel doğruluk — kayan-pencere volatilite ağırlıklarıyla
+   * kuadratik ortalama: taktiksel (dalgalı) bölgelerdeki hamleler daha ağır
+   * basar, sakin hamleler ezilmez; tek blunder oyunu çökertmez (harmonik
+   * reddedildi: [14×97 + 1×0] → 0.0). Kitap hamleleri dahil (doğruluk 100,
+   * ağırlık 1×) — ağırlıklı ortalama kitap/oyun dengesini korur.
    */
   const sideAccuracy = (side: 'w' | 'b') => {
     const sideMoves = moves.filter((m) => m.side === side);
-    return powerMean(sideMoves.map((m) => m.accuracy), 2);
+    const deltas = sideMoves.map((m) => Math.abs(m.moverWinPercentAfter - m.moverWinPercentBefore));
+    return weightedQuadraticMean(
+      sideMoves.map((m) => m.accuracy),
+      volatilityWeights(deltas),
+    );
   };
   const opening = identifyOpening(steps.map((s) => s.moveSan));
 
@@ -360,6 +369,14 @@ export interface ReviewJsonMove {
   classification: string;
   accuracy_score: number;
   comment: string;
+  /** Hamle-bazlı teknik blok (örnek şema): pozisyon + değerlendirme + kazanma şansı + kayıp. */
+  fen_before: string;
+  eval_before: number | null;
+  eval_after: number | null;
+  win_percent_before: number;
+  win_percent_after: number;
+  centipawn_loss: number | null;
+  move_accuracy: number;
 }
 
 export interface GameReviewJson {
@@ -408,6 +425,15 @@ export function buildReviewJson(result: GameReviewResult): GameReviewJson {
       classification: m.classification === 'miss' ? 'missed_win' : m.classification,
       accuracy_score: r1(m.accuracy),
       comment: m.comment ?? '',
+      fen_before: m.fenBefore,
+      eval_before: m.evalBeforeWhiteCp === null ? null : Math.round(m.evalBeforeWhiteCp) / 100,
+      eval_after: m.evalAfterWhiteCp === null ? null : Math.round(m.evalAfterWhiteCp) / 100,
+      win_percent_before: Math.round((m.side === 'w' ? m.moverWinPercentBefore : 100 - m.moverWinPercentBefore) * 10) / 10,
+      win_percent_after: Math.round((m.side === 'w' ? m.moverWinPercentAfter : 100 - m.moverWinPercentAfter) * 10) / 10,
+      centipawn_loss: m.evalBeforeWhiteCp !== null && m.evalAfterWhiteCp !== null
+        ? Math.round(m.side === 'w' ? m.evalBeforeWhiteCp - m.evalAfterWhiteCp : m.evalAfterWhiteCp - m.evalBeforeWhiteCp)
+        : null,
+      move_accuracy: r1(m.accuracy),
     })),
   };
 }
