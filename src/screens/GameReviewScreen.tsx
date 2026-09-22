@@ -258,7 +258,8 @@ function ReviewNavBar(props: {
 }
 
 function NavArrowIcon({ dir, double }: { dir: 'left' | 'right'; double?: boolean }) {
-  const flip = dir === 'left';
+  // Taban yol SOLA bakar; sağa bakan butonlar için aynala.
+  const flip = dir === 'right';
   return (
     <svg width="20" height="16" viewBox="0 0 26 16" aria-hidden style={flip ? { transform: 'scaleX(-1)' } : undefined}>
       <path d="M3 8l6-6v4h7v4H9v4z" fill="currentColor" />

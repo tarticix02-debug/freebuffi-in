@@ -171,8 +171,8 @@ return {
 applyMissPass(moves);
 
 const avg = (arr: MoveReview[]) => (arr.length ? arr.reduce((s, m) => s + m.accuracy, 0) / arr.length : 0);
-/** CAPS ADIM 4: hamle doğrulukları power mean (p=-0.5) ile birleştirilir — aritmetik ortalama tek hatayı şişirir. */
-const powerMeanAcc = (arr: MoveReview[]) => powerMean(arr.map((m) => m.accuracy), -0.5);
+/** CAPS ADIM 4: hamle doğrulukları power mean (p=2, kuadratik) ile birleştirilir — aritmetik ortalama tek hatayı şişirir, harmonik ise sıfırlar. */
+const powerMeanAcc = (arr: MoveReview[]) => powerMean(arr.map((m) => m.accuracy));
 const opening = identifyOpening(steps.map((s) => s.moveSan));
 
 /** Chess.com tarzı sınıf sayımı (her taraf için). */

@@ -53,12 +53,19 @@ describe('ADIM 3 — hamle doğruluğu (üstel çöküş)', () => {
 });
 
 describe('ADIM 4 — power mean', () => {
-  it('tek büyük hata, aritmetik ortalamadan daha fazla cezalandırır', () => {
+  it('kuadratik ortalama harmonik gibi çökertmez, aritmetiğe yakın kalır', () => {
     const accs = [100, 100, 100, 100, 100, 100, 100, 100, 100, 20];
     const arithmetic = accs.reduce((s, a) => s + a, 0) / accs.length; // 92.0
-    const pm = powerMean(accs); // varsayılan p=-0.5: küçük puanlar ağır basar
-    expect(pm).toBeLessThan(arithmetic);
-    expect(pm).toBeGreaterThan(60); // harmonik (71) kadar sert değil
+    const pm = powerMean(accs); // varsayılan p=2 (kuadratik) → ~95.1
+    expect(pm).toBeGreaterThan(88); // harmonik (71) gibi oyunu çökertmez
+    expect(pm).toBeLessThanOrEqual(100);
+    expect(Math.abs(pm - arithmetic)).toBeLessThan(5);
+  });
+  it('tek acc=0 hamle oyunu 0\'a çökertmez (p=-0.5 regresyonu)', () => {
+    // Canlı analizde yakalanan patoloji: 14 mükemmel hamle + 1 blunder(acc=0)
+    // p=-0.5 ile 0.0% üretiyordu; chess.com'da benzer oyun ~90 bandındadır.
+    const accs = Array(14).fill(97).concat([0]);
+    expect(powerMean(accs)).toBeGreaterThan(85);
   });
   it('tüm yüzler → 100', () => {
     expect(powerMean([100, 100, 100])).toBeCloseTo(100, 6);

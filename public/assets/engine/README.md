@@ -1,9 +1,15 @@
-# Stockfish Motor Asseti (Stockfish 19, lite, single-thread)
+# Stockfish Motor Asseti (Stockfish 19, tam NNUE, single-thread)
 
-Bu klasördeki `stockfish.js` (21 KB glue) ve `stockfish.wasm` (1.7 MB) dosyaları
-resmi `stockfish` npm paketinin **v19.0.0** sürümünden
-`bin/stockfish-19-lite-single.js` + `bin/stockfish-19-lite-single.wasm`
-olarak alınmıştır (unpkg.com/stockfish@19.0.0/bin/…).
+Bu klasördeki `stockfish.js` (21 KB glue) ve `stockfish.wasm` (99 MB tam NNUE)
+dosyaları resmi `stockfish` npm paketinin **v19.0.0** sürümünden
+`bin/stockfish-19-single.js` + `bin/stockfish-19-single.wasm` olarak alınmıştır
+(unpkg.com/stockfish@19.0.0/bin/…).
+
+**ÖNEMLİ:** İnceleme kalibrasyonu (chess.com paritesi) tam NNUE gerektirir.
+Lite varyant (`stockfish-19-lite-single`, 1.7 MB) sıkıştırılmış minik ağ kullandığı
+için değerlendirmeler zayıflar ve doğruluk oranları düşer — inceleme hattında
+LİTE KULLANMA. Lite yalnızca boyut kritikse (APK) oyun içi ipucu/eval için
+düşünülebilir.
 
 - **Single-thread**: SharedArrayBuffer/pthread GEREKTİRMEZ — normal statik
   hosting, Vite dev ve Capacitor WebView'de özel header olmadan çalışır.

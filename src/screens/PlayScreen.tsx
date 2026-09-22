@@ -47,6 +47,12 @@ export function PlayScreen() {
     };
   }, []);
 
+  // Sayfa yenilendiğinde store bellekte sıfırlandığı için motor yeniden init
+  // edilmeli — yoksa eval bar, ipucu ve bilgisayar hamlesi sessizce çalışmaz.
+  useEffect(() => {
+    void useEngineStore.getState().init();
+  }, []);
+
   // Canlı eval bar: yalnız sıra bizdeyken ve motor READY iken örneklenir.
   // Bağımlılık FEN string'i (game örneği mutate edildiği için kimliği değişmez);
   // skip edilen pozisyon ref'i tüketmez — motor hazır olunca tekrar denenir.
@@ -55,29 +61,39 @@ export function PlayScreen() {
   const [evalSample, setEvalSample] = useState<{ cp: number | null; mate: number | null } | null>(null);
   const evalFenRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!evalMyTurn || engineStatus !== 'READY') { evalFenRef.current = null; return; }
-    if (evalFenRef.current === evalFen) return;
-    evalFenRef.current = evalFen;
-    let cancelled = false;
+    if (!evalMyTurn) { evalFenRef.current = null; return; }
+    const fen = evalFen;
+    if (evalFenRef.current === fen) return;
+    evalFenRef.current = fen;
+    let dead = false;
     (async () => {
-      try {
-        const es = useEngineStore.getState();
-        if (es.status !== 'READY') return;
-        const r = await es.requestBestMove(evalFen);
-        if (!cancelled) {
-          // Motor skoru SIRA-SINDA-OLANın perspektifinden verir; bar beyaz
-          // perspektifi ister. Örnekleme yalnız bizim sıramızda olduğu için
-          // işaret bizim rengimize göre çevrilir.
-          const sign = orientation === 'w' ? 1 : -1;
-          setEvalSample({
-            cp: r.evaluationCp === null ? null : r.evaluationCp * sign,
-            mate: r.mate === null ? null : r.mate * sign,
+      // Motorun hazır olmasını bekle: durum değişimi burada abonelikle izlenir,
+      // effect bağımlılığı DEĞİL — aksi halde kendi isteğimizin THINKING/READY
+      // dalgalanması effect'i sürekli iptal eder ve bar hiç örneklenmezdi.
+      if (useEngineStore.getState().status !== 'READY') {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => { unsub(); resolve(); }, 15000);
+          const unsub = useEngineStore.subscribe((s) => {
+            if (s.status === 'READY') { clearTimeout(timeout); unsub(); resolve(); }
           });
-        }
+        });
+      }
+      if (dead) return;
+      try {
+        const r = await useEngineStore.getState().requestBestMove(fen);
+        if (dead) return;
+        // Motor skoru SIRA-SINDA-OLANın perspektifinden verir; bar beyaz
+        // perspektifi ister. Örnekleme yalnız bizim sıramızda olduğu için
+        // işaret bizim rengimize göre çevrilir.
+        const sign = orientation === 'w' ? 1 : -1;
+        setEvalSample({
+          cp: r.evaluationCp === null ? null : r.evaluationCp * sign,
+          mate: r.mate === null ? null : r.mate * sign,
+        });
       } catch { /* bar değerini koru */ }
     })();
-    return () => { cancelled = true; };
-  }, [evalFen, engineStatus, evalMyTurn]);
+    return () => { dead = true; };
+  }, [evalFen, evalMyTurn, orientation]);
 
   // Hamle listesi: her render'da history'den türetilir; otomatik kaydırma için ref.
   // NOT: Hook'lar erken return'den ÖNCE çağrılmalı (Rules of Hooks).

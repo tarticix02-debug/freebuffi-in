@@ -37,14 +37,17 @@ export function moveAccuracyFromLoss(winLoss: number, isBookMove: boolean = fals
 }
 
 /**
- * ADIM 4: power mean (kuvvet ortalaması). Katsayı işareti yön belirler:
- * p > 0 büyük değerleri, p < 0 KÜÇÜK değerleri ağır basar. Doğruluk puanı
- * için istenen ikincisi olduğundan varsayılan p = -0.5 (negatif kuadratik):
- * tek blunder ortalamayı belirgin düşürür ama harmonik (p=-1) gibi oyunu
- * sıfırlamaz. Ölçüm: 9×100 + 1×20 dizisinde aritmetik 92.0, p=-0.5 → 79.2.
+ * ADIM 4: power mean (kuvvet ortalaması), p = 2 (kuadratik).
+ *
+ * NOT: Daha önce p = -0.5 denendi; canlı analizde patolojik çıktı —
+ * 0 doğruluklu TEK hamle (0^-0.5 = ∞) tüm oyunu 0.0%'a çökertiyor ve
+ * genel eğri chess.com'dan çok daha sertti (14 mükemmel + 1 blunder ≈ 38).
+ * Kuadratik ortalama chess.com davranışına paralel: tek blunder belirgin
+ * düşürür ama sıfırlamaz. Ölçüm: 9×100 + 1×20 → aritmetik 92.0, kuadratik 91.4;
+ * 14×97 + 1×0 → 93.7 (chess.com'da benzer oyun ~90-93 bandında).
  * Boş liste → 0.
  */
-export function powerMean(accuracies: number[], p: number = -0.5): number {
+export function powerMean(accuracies: number[], p: number = 2): number {
   if (!accuracies.length) return 0;
   const sum = accuracies.reduce((s, a) => s + Math.pow(a, p), 0);
   return Math.pow(sum / accuracies.length, 1 / p);

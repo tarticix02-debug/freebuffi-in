@@ -48,8 +48,8 @@ get().engine.setLevel(lvl);
 },
 
 requestBestMove: async (fen: string) => {
-const { engine, level } = get();
-const status = engine.getStatus();
+const { level } = get();
+const status = get().engine.getStatus();
 if (status === 'ERROR' || status === 'LOADING') {
 throw new Error('Motor hazır değil. Analiz/oyun başlatılamaz.');
 }
@@ -58,20 +58,43 @@ throw new Error('Motor hazır değil. Analiz/oyun başlatılamaz.');
 // sürmekte olan arama bitene kadar bekleyip sıraya gir — en fazla ~3sn.
 if (status === 'THINKING') {
 const start = Date.now();
-while (engine.getStatus() === 'THINKING' && Date.now() - start < 3000) {
+while (get().engine.getStatus() === 'THINKING' && Date.now() - start < 3000) {
 await new Promise((r) => setTimeout(r, 50));
 }
-if (engine.getStatus() !== 'READY') {
+if (get().engine.getStatus() === 'THINKING') {
+// Arama beklenen sürede bitmedi: cevap kayboldu (wasm çökmesi). Worker
+// tazelenir; istek yeni worker'a gider — kilit diğer istekleri bloklamaz.
+get().reset();
+await get().init();
+} else if (get().engine.getStatus() !== 'READY') {
 throw new Error('Motor hazır değil. Analiz/oyun başlatılamaz.');
 }
 }
-const requestId = uid();
 const movetimeMs = levelToMoveTimeMs(level);
-return engine.analyze(fen, { movetimeMs }, requestId);
+// Yerleşik bekçi: bestmove beklenen sürede gelmezse istek hatayla biter,
+// worker tazelenir ve istek bir kez yeni worker'da yeniden denenir.
+try {
+return await Promise.race([
+get().engine.analyze(fen, { movetimeMs }, uid()),
+new Promise<never>((_, reject) =>
+setTimeout(() => reject(new Error('Motor arama zaman aşımı')), movetimeMs + 5000),
+),
+]);
+} catch (e) {
+if ((e as Error).message !== 'Motor arama zaman aşımı') throw e;
+get().reset();
+await get().init();
+return get().engine.analyze(fen, { movetimeMs }, uid());
+}
 },
 
 reset: () => {
 get().engine.destroy();
-set({ status: 'LOADING', errorMessage: null, engine: new StockfishEngine() });
+const fresh = new StockfishEngine();
+// Paylaşılan init sözü sıfırlanır ki reset sonrası init() gerçekten yeni
+// worker'ı kursun; yeni worker'ın durum değişimleri de store'a akar.
+fresh.onStatusChange((s) => set({ status: s, errorMessage: s === 'ERROR' ? fresh.getLastError() : null }));
+set({ status: 'LOADING', errorMessage: null, engine: fresh });
+initInFlight = null;
 },
 }));
