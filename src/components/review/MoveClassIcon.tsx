@@ -31,16 +31,16 @@ export const CLASS_COLORS: Record<MoveClassKey, string> = {
 };
 
 export const CLASS_LABELS: Record<MoveClassKey, string> = {
-  brilliant: 'Brilliant',
-  great: 'Great',
-  best: 'En İyi',
-  excellent: 'Excellent',
+  brilliant: 'Muhteşem',
+  great: 'Harika',
+  best: 'En iyi',
+  excellent: 'Harika',
   good: 'İyi',
   book: 'Kitap',
-  inaccuracy: 'Hata (Minor)',
+  inaccuracy: 'Yanlışlık',
   mistake: 'Hata',
-  miss: 'Fırsat Kaçırdın',
-  blunder: 'Büyük Hata',
+  miss: 'Kayıp',
+  blunder: 'Hata',
 };
 
 export function MoveClassIcon({ kind, size = 22 }: { kind: MoveClassKey; size?: number }) {

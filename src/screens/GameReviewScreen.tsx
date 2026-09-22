@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameReviewStore } from '../state/gameReviewStore';
+import { buildReviewJson } from '../services/gameReviewService';
 import { useEngineStore } from '../state/engineStore';
 import { getAllGames } from '../storage/gameHistoryStore';
 import { AnalysisBoard } from '../components/review/AnalysisBoard';
@@ -93,6 +94,7 @@ export function GameReviewScreen() {
         <h2>{result.openingName ?? 'Bilinmeyen Açılış'} {result.openingEco && `(${result.openingEco})`}</h2>
         <div className="review-screen__export">
           <button className="btn btn--secondary" onClick={() => downloadPgn(result)}>PGN İndir</button>
+          <button className="btn btn--secondary" onClick={() => downloadReviewJson(result)}>JSON İndir</button>
           <CopyFenButton fen={currentFen} />
           <button className="btn btn--secondary" onClick={() => { reset(); setShowImport(true); }}>Yeni PGN/FEN İncele</button>
         </div>
@@ -139,16 +141,26 @@ export function GameReviewScreen() {
       {showImport && <ImportPanel onImport={async (raw) => { setShowImport(false); await startFromUserInput(raw); }} />}
     </div>
   );
-}
-
-/** PGN dışa aktarma: açıklamalı PGN'i .pgn dosyası olarak indirir. */
-function downloadPgn(result: NonNullable<ReturnType<typeof useGameReviewStore.getState>['result']>) {
+}function downloadPgn(result: NonNullable<ReturnType<typeof useGameReviewStore.getState>['result']>) {
   const pgn = buildAnnotatedPgn(result);
   const blob = new Blob([pgn], { type: 'application/x-chess-pgn' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'ultimate-chess-inceleme.pgn';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Bileşen 5: chess.com-şemalı JSON raporu .json dosyası olarak indirir. */
+function downloadReviewJson(result: NonNullable<ReturnType<typeof useGameReviewStore.getState>['result']>) {
+  const blob = new Blob([JSON.stringify(buildReviewJson(result), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ultimate-chess-inceleme.json';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -317,6 +329,7 @@ function MoveDetailCard({ move }: { move: NonNullable<ReturnType<typeof useGameR
         )}
       </p>
       <p>Doğruluk katkısı: {move.accuracy.toFixed(1)}% • Win kaybı: {move.winPercentLoss.toFixed(1)}%</p>
+      {move.comment && <p className="move-detail__comment">{move.comment}</p>}
     </div>
   );
 }
