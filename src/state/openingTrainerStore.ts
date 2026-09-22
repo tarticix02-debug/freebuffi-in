@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type { Square } from 'chess.js';
 import { OPENING_LINES } from '../data/openingBook';
 import { createTrainerSession, attemptTraineeMove, retryAfterMistake, type TrainerSession } from '../openings/openingTrainerEngine';
-import { getAllProgress, recordTrainingSession, pickNextLine } from '../services/openingProgressService';
+import { getAllProgress, recordTrainingSession, pickNextLine, lineId } from '../services/openingProgressService';
+import { appendOpeningSession } from '../storage/openingSessionStore';
 import { evaluateAndPersistAchievements } from '../services/achievementService';
 import { useAchievementToastStore } from './achievementToastStore';
 import { useDailyQuestStore } from './dailyQuestStore';
@@ -40,6 +41,10 @@ export const useOpeningTrainerStore = create<OpeningTrainerState>((set, get) => 
     const updated = attemptTraineeMove(session, from, to, promotion);
     set({ session: { ...updated } });
     if (updated.status === 'completed') {
+      // Hem ilerleme takibi hem de günlük görev bağlamı (openingSessions tablosu) beslenir.
+      appendOpeningSession(lineId(updated.line), updated.line.name, updated.mistakes.length).catch(
+        (e: Error) => console.error('Açılış oturum kaydı başarısız:', e)
+      );
       recordTrainingSession(updated.line, updated.mistakes).then(async () => {
         try {
           const newlyAch = await evaluateAndPersistAchievements();

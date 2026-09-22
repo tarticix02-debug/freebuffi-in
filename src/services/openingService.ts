@@ -23,8 +23,3 @@ export function identifyOpening(sanMoves: string[]): OpeningIdentification {
   return { name: lastNamed?.name ?? null, eco: lastNamed?.eco ?? null, matchedFullLine };  
 }  
   
-export function identifyOpeningFromPgn(pgn: string): OpeningIdentification {  
-  const chess = new Chess();  
-  chess.loadPgn(pgn);  
-  return identifyOpening(chess.history());  
-}

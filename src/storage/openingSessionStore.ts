@@ -10,13 +10,10 @@ mistakes: number;
 mistakeFree: boolean;
 }
 
+/** Antrenör oturumunu kaydeder — günlük görevler bu tabloyu okur. */
 export async function appendOpeningSession(lineId: string, lineName: string, mistakeCount: number): Promise<void> {
 await dbPut('openingSessions', {
 id: uid(), lineId, lineName, date: Date.now(),
 mistakes: mistakeCount, mistakeFree: mistakeCount === 0,
 });
-}
-
-export async function getAllOpeningSessions(): Promise<OpeningSessionRecord[]> {
-return dbGetAll<OpeningSessionRecord>('openingSessions');
 }

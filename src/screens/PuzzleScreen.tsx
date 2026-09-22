@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';  
+import { useEffect, useRef, useState } from 'react';  
 import { usePuzzleStore } from '../state/puzzleStore';  
 import { PuzzleBoard } from '../components/puzzle/PuzzleBoard';  
 import { Button } from '../components/common/Button';  
@@ -19,6 +19,8 @@ export function PuzzleScreen() {
   const { loading, session, lastResult, puzzleRating, init, loadNext, giveUp } = usePuzzleStore();  
   const [stats, setStats] = useState<ReturnType<typeof computePuzzleStats> | null>(null);  
   const [generating, setGenerating] = useState<{ active: boolean; progress: string }>({ active: false, progress: '' });  
+  const [genDone, setGenDone] = useState<string | null>(null);  
+  const genCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });  
   
   useEffect(() => { init(); refreshStats(); }, [init]);
   // Her çözüm/başarısızlık denemesinden sonra istatistik çiplerini tazele.
@@ -30,14 +32,16 @@ export function PuzzleScreen() {
   }  
   
   async function handleGenerate() {  
+    setGenDone(null);  
     setGenerating({ active: true, progress: 'Başlatılıyor…' });  
+    genCancelRef.current = { cancelled: false };  
     const found = await generatePuzzlesFromOwnGames((p) =>  
       setGenerating({ active: true, progress: `${p.currentGame}/${p.totalGames} oyun analiz edildi, ${p.puzzlesFound} puzzle bulundu` })  
     );  
     setGenerating({ active: false, progress: '' });  
     await init();  
     await refreshStats();  
-    alert(found > 0 ? `${found} yeni puzzle oluşturuldu.` : 'Oyunlarınızda belirgin bir hata bulunamadı ya da işlenecek yeni oyun yok.');  
+    setGenDone(found > 0 ? `${found} yeni puzzle oluşturuldu.` : 'Oyunlarınızda belirgin bir hata bulunamadı ya da işlenecek yeni oyun yok.');  
   }  
   
   if (loading) return <div className="state-panel"><div className="spinner" /><p>Puzzle yükleniyor…</p></div>;  
@@ -49,6 +53,7 @@ export function PuzzleScreen() {
         <Button onClick={handleGenerate} disabled={generating.active}>  
           {generating.active ? generating.progress : 'Kendi Oyunlarımdan Puzzle Üret'}  
         </Button>  
+        {generating.active && <Button variant="secondary" onClick={() => { genCancelRef.current.cancelled = true; }}>İptal</Button>}
       </div>  
     );  
   }  
@@ -99,9 +104,14 @@ export function PuzzleScreen() {
         </span>  
       </div>  
   
-      <Button variant="secondary" onClick={handleGenerate} disabled={generating.active}>  
-        {generating.active ? generating.progress : 'Kendi Oyunlarımdan Yeni Puzzle Üret'}  
-      </Button>  
+      {generating.active && <Button variant="ghost" onClick={() => { genCancelRef.current.cancelled = true; }}>Üretimi İptal Et</Button>}  
+      {!generating.active && (
+        <Button variant="secondary" onClick={handleGenerate} disabled={generating.active}>  
+          Kendi Oyunlarımdan Yeni Puzzle Üret  
+        </Button>  
+      )}  
+      {generating.active && <p className="puzzle-feedback">Analiz sürüyor — İptal edebilirsiniz.</p>}
+      {genDone && <p className="puzzle-feedback">{genDone}</p>}
     </div>  
   );  
 }

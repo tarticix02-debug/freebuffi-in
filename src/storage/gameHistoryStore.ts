@@ -29,7 +29,3 @@ const games = await dbGetAll<GameRecord>('games');
 return games.sort((a, b) => b.date - a.date);
 }
 
-export async function getGameById(id: string): Promise<GameRecord | null> {
-const games = await dbGetAll<GameRecord>('games');
-return games.find((g) => g.id === id) ?? null;
-}

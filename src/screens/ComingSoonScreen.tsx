@@ -1,1 +1,0 @@
-export function ComingSoonScreen({title}:{title:string}){return <div className="coming-soon"><div className="coming-soon__icon">◐</div><h2>{title}</h2><p>Bu özellik mevcut kaynakta henüz tam bağlanmamış.</p></div>}

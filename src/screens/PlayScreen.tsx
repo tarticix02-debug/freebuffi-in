@@ -8,9 +8,6 @@ import { ENGINE_PRESETS, levelToElo } from '../engine/levels';
 import { Board } from '../components/board/Board';
 import { Button } from '../components/common/Button';
 import { UnoHand } from '../components/variants/uno/UnoHand';
-import { MoveClassIcon, CLASS_LABELS } from '../components/review/MoveClassIcon';
-import { analyzeGame, type GameReviewResult } from '../services/gameReviewService';
-import { pickKeyChips } from '../services/reviewKeyChips';
 import { TIME_CONTROLS, formatClock, remainingMs, isTimed, type TimeControl } from '../services/clockService';
 import { useMultiplayerStore } from '../state/multiplayerStore';
 import { GameEvalBar } from '../components/board/GameEvalBar';
@@ -448,27 +445,6 @@ function GameOverOverlay({ info, vsComputer, humanColor, isVariant, gameId, onRe
   onHome: () => void;
 }) {
   const navigate = useNavigate();
-  const [keyMoves, setKeyMoves] = useState<GameReviewResult | null>(null);
-
-  // Biten oyunun hızlı derinlik-8 analiziyle en önemli 3 hamle çıkarılır.
-  useEffect(() => {
-    let active = true;
-    if (isVariant || !gameId) return;
-    (async () => {
-      try {
-        const { getGameById } = await import('../storage/gameHistoryStore');
-        const record = await getGameById(gameId);
-        if (!record?.pgn || !active) return;
-        const result = await analyzeGame(record.pgn, { depth: 8 });
-        if (active) setKeyMoves(result);
-      } catch { /* analiz başarısızsa göstergeler gizli kalır */ }
-    })();
-    return () => { active = false; };
-  }, [gameId, isVariant]);
-
-  // chess.com önceliği: brilliant > very good (great) > en ağır hata.
-  // Türetmenin tek sahibi pickKeyChips — overlay ile regresyon testi aynı sözleşmeyi paylaşır.
-  const picks = keyMoves ? pickKeyChips(keyMoves, humanColor) : [];
 
   const iWon = info.winner === humanColor;
   const isDraw = !info.winner;
@@ -488,18 +464,6 @@ function GameOverOverlay({ info, vsComputer, humanColor, isVariant, gameId, onRe
         <p className="game-over-panel__reason">
           {vsComputer && info.endReason === 'checkmate' && !iWon ? 'Şah mat sonucu — rakip kazandı' : reasonText}
         </p>
-
-        {picks.length > 0 && (
-          <div className="game-over-panel__summary">
-            {picks.map(({ cls, n }) => (
-              <div key={cls} className="game-over-panel__key" title={CLASS_LABELS[cls]}>
-                <MoveClassIcon kind={cls} size={34} />
-                <em>{n}</em>
-                <span>{CLASS_LABELS[cls]}</span>
-              </div>
-            ))}
-          </div>
-        )}
 
         <div className="game-over-panel__actions">
           <Button onClick={onRematch}>Tekrar Oyna</Button>
