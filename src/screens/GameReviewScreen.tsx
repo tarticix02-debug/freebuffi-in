@@ -91,7 +91,9 @@ export function GameReviewScreen() {
   return (
     <div className="review-screen">
       <div className="review-screen__header">
-        <h2>{result.openingName ?? 'Bilinmeyen Açılış'} {result.openingEco && `(${result.openingEco})`}</h2>
+        <h2>{result.openingName ?? 'Bilinmeyen Açılış'} {result.openingEco && `(${result.openingEco})`}
+          <span className="beta-badge" title="Oyun incelemesi geliştirme aşamasında — sonuçlar yaklaşıktır">BETA</span>
+        </h2>
         <div className="review-screen__export">
           <button className="btn btn--secondary" onClick={() => downloadPgn(result)}>PGN İndir</button>
           <button className="btn btn--secondary" onClick={() => downloadReviewJson(result)}>JSON İndir</button>

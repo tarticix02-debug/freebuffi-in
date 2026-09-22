@@ -504,7 +504,7 @@ function GameOverOverlay({ info, vsComputer, humanColor, isVariant, gameId, onRe
         <div className="game-over-panel__actions">
           <Button onClick={onRematch}>Tekrar Oyna</Button>
           {gameId && !isVariant && (
-            <Button variant="secondary" onClick={() => navigate(`/review/${gameId}`)}>Oyunu İncele</Button>
+            <Button variant="secondary" onClick={() => navigate(`/review/${gameId}`)}>Oyunu İncele <span className="beta-badge beta-badge--inline">BETA</span></Button>
           )}
           <Button variant="secondary" onClick={onHome}>Ana Sayfa</Button>
         </div>

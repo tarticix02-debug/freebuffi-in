@@ -72,7 +72,7 @@ export function HomeScreen() {
                   <strong>{game.mode === 'classic' ? 'Klasik' : game.mode === 'vs-computer' ? 'Bilgisayara Karşı' : game.mode}</strong>
                   <p>{game.opponent} · {game.result === 'win' ? 'Kazandı' : game.result === 'loss' ? 'Kaybetti' : 'Berabere'}</p>
                 </div>
-                <Link to={`/review/${game.id}`}>İncele</Link>
+                <Link to={`/review/${game.id}`}>İncele <span className="beta-badge beta-badge--inline">BETA</span></Link>
               </div>
             ))}
           </div>

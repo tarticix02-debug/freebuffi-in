@@ -203,3 +203,7 @@ h2 { font-size: 17px; font-weight: 700; }
 .move-detail__metrics{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin:8px 0;font-size:13px;color:var(--text-secondary)}
 .move-detail__metrics span[title]{cursor:help}
 .move-detail__comment{margin:8px 0 0;padding:8px 12px;background:var(--bg-card);border-left:3px solid var(--accent);border-radius:6px;font-size:13px;font-style:italic;color:var(--text-primary)}
+
+/* Oyun incelemesi beta rozeti — özellik rafa kaldırılana/değiştirilene kadar görünür */
+.beta-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em;background:var(--warning);color:#1a1a1a}
+.beta-badge--inline{margin-left:6px;font-size:9px;padding:0 6px}
