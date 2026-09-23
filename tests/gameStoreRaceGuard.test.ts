@@ -26,7 +26,7 @@ describe('eşleşme yarışı koruması (race guard)', () => {
   it('yeni maç başlatınca havada kalan eski motor cevabı tahtayı bozmaz', async () => {
     // 1) Bilgisayara karşı maç başlat (oyun motorundan hamle bekleyecek).
     useGameStore.getState().startClassic('b', true);
-    expect(useGameStore.getState().game.raw.history().length).toBe(0);
+    expect(useGameStore.getState().game.history().length).toBe(0);
 
     // 2) Motor cevabı gelmeden yeni bir maç başlat.
     await new Promise((r) => setTimeout(r, 5));
@@ -38,7 +38,7 @@ describe('eşleşme yarışı koruması (race guard)', () => {
     await new Promise((r) => setTimeout(r, 60));
     const s = useGameStore.getState();
     expect(s.game).toBe(useGameStore.getState().game);
-    expect(s.game.raw.history().length).toBe(0); // e7e5 sızmadı
+    expect(s.game.history().length).toBe(0); // e7e5 sızmadı
   });
 
   it('resign sonrası gelen motor cevabı işlenmez', async () => {
@@ -50,7 +50,7 @@ describe('eşleşme yarışı koruması (race guard)', () => {
     const s = useGameStore.getState();
     // Teslim sonrası tahta değişmemeli ve maç bitmiş kalmalı.
     expect(s.matchInProgress).toBe(false);
-    expect(s.game.raw.history().length).toBe(0);
+    expect(s.game.history().length).toBe(0);
     expect(s.gameOverInfo?.result).toContain('Teslim');
   });
 });

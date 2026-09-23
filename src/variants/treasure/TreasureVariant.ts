@@ -38,7 +38,7 @@ log: [],
 onAfterMove: (state: VariantRuntimeState, game: ChessGame) => {
 state.moveCounter++;
 const chests = state.customData.chests as string[];
-const history = game.raw.history({ verbose: true });
+const history = game.history({ verbose: true });
 const last = history[history.length - 1];
 if (!last || !chests.includes(last.to)) { state.activeEvents = []; return []; }
 

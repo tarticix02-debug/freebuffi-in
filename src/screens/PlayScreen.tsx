@@ -92,10 +92,17 @@ export function PlayScreen() {
     return () => { dead = true; };
   }, [evalFen, evalMyTurn, orientation]);
 
+  // Bitmiş maçın /play'e dönüşte dirilmesini önler: ekranı terk edip geri
+  // gelindiğinde (reload yok) eski gameOverInfo overlay'i açılıyordu.
+  useEffect(() => {
+    const over = useGameStore.getState().gameOverInfo;
+    if (over?.over) useGameStore.setState({ gameOverInfo: null, matchInProgress: false });
+  }, []);
+
   // Hamle listesi: her render'da history'den türetilir; otomatik kaydırma için ref.
   // NOT: Hook'lar erken return'den ÖNCE çağrılmalı (Rules of Hooks).
-  const historyLen = useGameStore((s) => s.game.raw.history().length);
-  const historySan = useGameStore((s) => s.game.raw.history());
+  const historyLen = useGameStore((s) => s.game.history().length);
+  const historySan = useGameStore((s) => s.game.history());
   const clock = useGameStore((s) => s.clock);
   const clockControl = useGameStore((s) => s.clockControl);
   const moveListRef = useRef<HTMLDivElement | null>(null);

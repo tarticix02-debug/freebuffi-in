@@ -9,7 +9,7 @@ describe('gameStore teslim olma (resign)', () => {
 
   it('teslim, oyunu kayıp olarak bitirir ve kaydeder', async () => {
     const store = useGameStore.getState();
-    store.game.raw.move({ from: 'e2', to: 'e4' });
+    store.game.move({ from: 'e2', to: 'e4' });
     await useGameStore.getState().resignGame();
 
     const s = useGameStore.getState();
@@ -37,14 +37,14 @@ describe('gameStore geri alma (undo)', () => {
 
   it('yerel iki oyuncuda iki hamleyi geri alır', async () => {
     const store = useGameStore.getState();
-    store.game.raw.move({ from: 'e2', to: 'e4' });
-    store.game.raw.move({ from: 'e7', to: 'e5' });
+    store.game.move({ from: 'e2', to: 'e4' });
+    store.game.move({ from: 'e7', to: 'e5' });
     expect(useGameStore.getState().canUndo()).toBe(true);
 
     await useGameStore.getState().undoLastMove();
 
     const s = useGameStore.getState();
-    expect(s.game.raw.history().length).toBe(0);
+    expect(s.game.history().length).toBe(0);
     expect(s.lastMove).toBeNull();
   });
 
@@ -54,7 +54,7 @@ describe('gameStore geri alma (undo)', () => {
 
   it('maç bitince geri alma kilitlenir', async () => {
     const store = useGameStore.getState();
-    store.game.raw.move({ from: 'e2', to: 'e4' });
+    store.game.move({ from: 'e2', to: 'e4' });
     await useGameStore.getState().resignGame();
     expect(useGameStore.getState().canUndo()).toBe(false);
   });

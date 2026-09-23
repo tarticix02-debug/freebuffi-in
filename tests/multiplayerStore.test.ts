@@ -37,17 +37,17 @@ describe('multiplayerStore mesaj işleme (host perspektifi)', () => {
   it('guest hamlesi (geçerli, doğru sıra) uygulanır', async () => {
     // Host beyaz; 1.e4 oynayınca sıra siyahta → guest'in e5'i uygulanmalı.
     await useGameStore.getState().playMove('e2', 'e4');
-    expect(useGameStore.getState().game.raw.history()).toEqual(['e4']);
+    expect(useGameStore.getState().game.history()).toEqual(['e4']);
 
     useMultiplayerStore.getState().handleMessage(guestMsg({ type: 'move', moveFrom: 'e7', moveTo: 'e5' }));
     await new Promise((r) => setTimeout(r, 30)); // async applyRemoteMove
-    expect(useGameStore.getState().game.raw.history()).toEqual(['e4', 'e5']);
+    expect(useGameStore.getState().game.history()).toEqual(['e4', 'e5']);
   });
 
   it('sıra gelmediğinde guest hamlesi yoksayılır (turn gate)', async () => {
     useMultiplayerStore.getState().handleMessage(guestMsg({ type: 'move', moveFrom: 'e7', moveTo: 'e5' }));
     await new Promise((r) => setTimeout(r, 30));
-    expect(useGameStore.getState().game.raw.history()).toEqual([]); // beyaz oynamadan siyah hamle edemez
+    expect(useGameStore.getState().game.history()).toEqual([]); // beyaz oynamadan siyah hamle edemez
   });
 
   it('illegal uzak hamle sessizce yoksayılır', async () => {
@@ -55,10 +55,10 @@ describe('multiplayerStore mesaj işleme (host perspektifi)', () => {
     useMultiplayerStore.getState().handleMessage(guestMsg({ type: 'move', moveFrom: 'e7', moveTo: 'e6' })); // e6 legal ama sıra... legal olsun: doğru sıra e7e6
     await new Promise((r) => setTimeout(r, 30));
     // e7e6 legaldir (Fransız) — uygulanmış olmalı; ardından duplicate aynı mesaj tekrar uygulanamaz:
-    const before = useGameStore.getState().game.raw.history().length;
+    const before = useGameStore.getState().game.history().length;
     useMultiplayerStore.getState().handleMessage(guestMsg({ type: 'move', moveFrom: 'e7', moveTo: 'e6' }));
     await new Promise((r) => setTimeout(r, 30));
-    expect(useGameStore.getState().game.raw.history().length).toBe(before + 0); // duplicate: sıra beyazda, yoksayıldı
+    expect(useGameStore.getState().game.history().length).toBe(before + 0); // duplicate: sıra beyazda, yoksayıldı
   });
 
   it('yanlış oda kodlu mesaj tamamen yoksayılır', () => {

@@ -207,7 +207,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Online maç sıra kilidi: herkes yalnızca KENDİ rengiyle oynar. applyRemoteMove
     // uzak hamleyi işaretler (remote=true): uzak tarafın reni orientation'ın tersi olmalı;
     // kendi rengine gelen uzak hamle (echo/yaşlı mesaj) geri alınır ve yoksayılır.
-    if (get().isOnlineMatch && remote && mv.color === get().orientation) { game.raw.undo(); return; }
+    if (get().isOnlineMatch && remote && mv.color === get().orientation) { game.undo(); return; }
 
     // Saat: hamleyi oynayanın süresinden geçen süre düşer, increment eklenir,
     // sıra rakibe geçer. Hamle öncesi anlık görüntü saklanır (undo iadesi).
@@ -422,17 +422,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { game, vsComputer, orientation, matchInProgress, variant } = get();
     if (!matchInProgress) return false;
     if (variant) return false; // varyant tahtası put/remove ile değişir; güvenli geri alma yok
-    if (!vsComputer) return game.raw.history().length >= 2;
+    if (!vsComputer) return game.history().length >= 2;
     // Bilgisayara karşı: sıra oyuncudaysa son iki hamle (bilgisayar + oyuncu) geri alınır.
-    return game.raw.turn() === orientation && game.raw.history().length >= 2;
+    return game.raw.turn() === orientation && game.history().length >= 2;
   },
 
   undoLastMove: async () => {
     if (!get().canUndo()) return;
     const { game, clockSnapshots } = get();
     tokenOf.set(game, ++matchTokenCounter); // bekleyen motor cevabını iptal et
-    game.raw.undo();
-    game.raw.undo();
+    game.undo();
+    game.undo();
     const snap = game.snapshot();
     // chess.com semantiği: geri alınan hamlelerin süresi iade edilir.
     const clock = restoreClockFromSnapshots(get().clock, clockSnapshots.slice(-1));
@@ -453,7 +453,7 @@ if (typeof window !== 'undefined') {
 }
 
 function lastMoveFromHistory(game: ChessGame): { from: string; to: string } | null {
-  const history = game.raw.history({ verbose: true });
+  const history = game.history({ verbose: true });
   const last = history[history.length - 1];
   return last ? { from: last.from, to: last.to } : null;
 }
@@ -550,7 +550,7 @@ if (typeof window !== 'undefined') {
     date: Date.now(), mode,
     opponent: state.isOnlineMatch ? 'Çevrimiçi Rakip' : state.vsComputer ? `Stockfish (Lv. ${useEngineStore.getState().level})` : 'Yerel Oyuncu',
     userColor: state.orientation, result, pgn: snap.pgn, finalFen: snap.fen,
-    moveCount: state.game.raw.history().length, durationSeconds, ratingBefore, ratingAfter,
+    moveCount: state.game.history().length, durationSeconds, ratingBefore, ratingAfter,
     timeControlId: state.clock ? TIME_CONTROLS.find((t) => t.control === state.clockControl)?.id ?? 'timed' : 'unlimited',
   });
   useGameStore.setState({ lastSavedGameId: saved.id });

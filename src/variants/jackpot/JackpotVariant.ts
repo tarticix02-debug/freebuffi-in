@@ -91,7 +91,7 @@ initialize: () => ({ variantId: 'jackpot', moveCounter: 0, customData: {}, activ
 
 onAfterMove: (state: VariantRuntimeState, game: ChessGame) => {
 state.moveCounter++;
-const history = game.raw.history({ verbose: true });
+const history = game.history({ verbose: true });
 const last = history[history.length - 1];
 if (!last || !last.captured) {
 state.activeEvents = [];

@@ -9,8 +9,8 @@ describe('gameStore beraberlik önerisi (offerDraw)', () => {
 
   it('yerel oyunda öner anında beraberlikle biter ve kaydedilir', async () => {
     const store = useGameStore.getState();
-    store.game.raw.move({ from: 'e2', to: 'e4' });
-    store.game.raw.move({ from: 'e7', to: 'e5' });
+    store.game.move({ from: 'e2', to: 'e4' });
+    store.game.move({ from: 'e7', to: 'e5' });
     await useGameStore.getState().offerDraw();
 
     const s = useGameStore.getState();

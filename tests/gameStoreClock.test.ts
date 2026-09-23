@@ -77,7 +77,7 @@ describe('gameStore süre bitişi (flag-fall)', () => {
     // süre tam başlangıç değerine yakın (elapsed iade edildi, increment geri alındı).
     expect(s.clock).not.toBeNull();
     expect(s.clock!.whiteMs).toBeGreaterThanOrEqual(299_000); // 300sn'e döndü (±1s tolerans)
-    expect(s.game.raw.history().length).toBe(2); // iki hamle geri alındı
+    expect(s.game.history().length).toBe(2); // iki hamle geri alındı
     expect(s.clockSnapshots.length).toBe(3); // son hamle çiftinin snapshot'ı düşürüldü
   });
 });

@@ -179,7 +179,7 @@ export function Board({ hintSquares }: { hintSquares?: string[] }) {
   // Zen modu köprüsü PlayScreen'dedir; Board saf tahta kalır.
 
   // Hamle değişince drag/premove seçim state'ini sıfırla (kalıntı olmasın).
-  const lastLen = game.raw.history().length;
+  const lastLen = game.history().length;
   useEffect(() => { setDragFrom(null); setDragTarget(null); setPremoveSel(null); }, [lastLen]);
 
   return (

@@ -41,7 +41,7 @@ export const TeleportVariant: VariantRule = {
   onAfterMove: (state, game) => {
     state.moveCounter++;
     const pads = state.customData.pads as Record<string, string>;
-    const history = game.raw.history({ verbose: true });
+    const history = game.history({ verbose: true });
     const last = history[history.length - 1];
 
     if (!last || !pads[last.to]) { state.activeEvents = []; return []; }
